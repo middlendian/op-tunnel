@@ -33,9 +33,11 @@ class OpTunnel < Formula
     launch_agent_dir.mkpath
     ln_sf plist, launch_agent_dir/"com.middlendian.op-tunnel-server.plist"
 
-    # Install SSH client config fragment
+    # Install SSH client config fragment and create socket directories
     op_tunnel_dir = Pathname.new("#{Dir.home}/.local/share/op-tunnel")
     op_tunnel_dir.mkpath
+    (op_tunnel_dir/"client").mkpath
+    (op_tunnel_dir/"server").mkpath
     cp share/"op-tunnel"/"ssh.config", op_tunnel_dir/"ssh.config"
 
     ohai "op-tunnel installed!"
