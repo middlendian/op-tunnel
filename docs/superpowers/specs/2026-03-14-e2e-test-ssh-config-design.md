@@ -27,15 +27,24 @@ ServerAliveInterval 30
 **Key design decisions:**
 
 - `~` is used on both sides of `RemoteForward`. The local `~` is expanded by the SSH client; the remote `~` is expanded by sshd.
-- `SetEnv LC_OP_TUNNEL_SOCK` also uses `~`. Since sshd passes this value verbatim (no shell expansion), the `op-tunnel-client` binary is responsible for expanding a leading `~/` to `$HOME/` when reading this variable.
+- `SetEnv LC_OP_TUNNEL_SOCK` also uses `~`. Recent OpenSSH client versions expand `~` in `SetEnv` values when parsing `~/.ssh/config`, but this is not guaranteed across all versions. The `op-tunnel-client` binary therefore also expands a leading `~/` to `$HOME/` when reading this variable, acting as a safety net regardless of SSH client version.
 - `StreamLocalBindUnlink yes` ensures stale sockets from previous sessions are cleaned up automatically.
 - `ServerAliveInterval 30` keeps the SSH connection alive to maintain the forwarded socket.
+- `dist/ssh.config` must remain a **directives-only file** — no `Host` or `Match` blocks. When `Include` is used inside a `Host` block, the included file's directives are scoped to that host. Any `Host` blocks inside the included file would be processed at the top level, breaking the scoping contract.
+
+**Requirements:**
+
+- **OpenSSH 7.3+** on the local machine (client). `Include` inside a `Host` block was added in OpenSSH 7.3 (released August 2016). Most modern macOS and Linux systems meet this requirement.
+- **`AcceptEnv LC_OP_TUNNEL_SOCK` in the remote server's `sshd_config`**. Without this, sshd silently drops the `SetEnv LC_OP_TUNNEL_SOCK` value and `op-tunnel-client` falls back to passthrough mode (no error, but tunneling is inactive). This is a required configuration step on each remote host. Installation instructions must call this out explicitly.
 
 **Installation:**
 
 The Makefile and Homebrew formula copy this file to `~/.local/share/op-tunnel/ssh.config`.
 
-Users add a single line inside each trusted `Host` block in `~/.ssh/config`:
+Users must:
+
+1. Add `AcceptEnv LC_OP_TUNNEL_SOCK` to the remote server's `/etc/ssh/sshd_config` and reload sshd.
+2. Add a single line inside each trusted `Host` block in their local `~/.ssh/config`:
 
 ```
 Host myserver
@@ -86,8 +95,9 @@ In `cmd/op-tunnel-client/main.go`, when reading `LC_OP_TUNNEL_SOCK`, expand a le
        UserKnownHostsFile /dev/null
        Include <repo>/dist/ssh.config
    ```
-7. **SSH in** — `ssh -F <temp config> op-tunnel-test` — interactive shell. The user runs `op` commands; biometric prompts appear on the local machine; results print in the container.
-8. **Cleanup** — on SSH exit (trap on EXIT): `docker stop` + `docker rm` the container, remove temp files.
+7. **Pre-flight check inside container** — before handing over to the user, run a non-interactive SSH command to verify `LC_OP_TUNNEL_SOCK` is set and the socket file exists (`test -S "$LC_OP_TUNNEL_SOCK"`). Print the result clearly (pass/fail) so forwarding failures are immediately visible.
+8. **SSH in** — `ssh -F <temp config> op-tunnel-test` — interactive shell. The user runs `op` commands; biometric prompts appear on the local machine; results print in the container.
+9. **Cleanup** — on SSH exit (trap on EXIT): `docker stop` + `docker rm` the container, remove temp files.
 
 ### What the test validates
 
