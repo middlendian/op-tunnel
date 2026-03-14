@@ -77,14 +77,26 @@ echo "==> op-tunnel-server is running."
 # --- 7. Pre-flight check ---
 echo "==> Checking tunnel forwarding..."
 PREFLIGHT=$(ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
-    'if [ -z "${LC_OP_TUNNEL_SOCK:-}" ]; then
-        echo "FAIL: LC_OP_TUNNEL_SOCK is not set (check AcceptEnv in sshd_config)"
-    elif ! test -S "$LC_OP_TUNNEL_SOCK"; then
-        echo "FAIL: socket not found at $LC_OP_TUNNEL_SOCK (is op-tunnel-server running?)"
+    'SOCK=$(echo "${LC_OP_TUNNEL_SOCK:-}" | sed "s|^~/|$HOME/|")
+    echo "DEBUG: HOME=$HOME"
+    echo "DEBUG: LC_OP_TUNNEL_SOCK=${LC_OP_TUNNEL_SOCK:-<unset>}"
+    echo "DEBUG: expanded SOCK=$SOCK"
+    SOCKDIR=$(dirname "$SOCK")
+    echo "DEBUG: ~/.local/share tree: $(find "$HOME/.local/share" 2>&1 | sort)"
+    if [ -d "$SOCKDIR" ]; then
+        echo "DEBUG: socket dir exists: $SOCKDIR"
+        echo "DEBUG: dir contents: $(ls -la "$SOCKDIR" 2>&1)"
     else
-        echo "PASS: socket at $LC_OP_TUNNEL_SOCK"
+        echo "DEBUG: socket dir missing: $SOCKDIR"
+    fi
+    if [ -z "${LC_OP_TUNNEL_SOCK:-}" ]; then
+        echo "FAIL: LC_OP_TUNNEL_SOCK is not set (check AcceptEnv in sshd_config)"
+    elif ! test -S "$SOCK"; then
+        echo "FAIL: socket not found at $SOCK (is op-tunnel-server running?)"
+    else
+        echo "PASS: socket at $SOCK"
     fi' 2>/dev/null)
-echo "    $PREFLIGHT"
+echo "$PREFLIGHT" | sed 's/^/    /'
 if echo "$PREFLIGHT" | grep -q "^FAIL"; then
     echo ""
     echo "Pre-flight failed. Fix the issue above and re-run."
