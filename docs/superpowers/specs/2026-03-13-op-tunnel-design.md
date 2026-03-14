@@ -29,6 +29,8 @@ Remote Host (Beta)                          Local Host (Alpha)
 
 - Listens on `~/.local/share/op-tunnel/server/op-tunnel.sock`
 - Accepts connections, reads a framed JSON request, executes the real `op` binary with the provided args and allowlisted env vars, captures stdout/stderr/exit code, returns a framed JSON response
+- Per-command timeout of 5 minutes (configurable). If `op` exceeds this, the process is killed and an `error` response is returned
+- Handles SIGINT/SIGTERM gracefully: stops accepting new connections, kills any in-flight `op` process, exits
 - Runs as a LaunchAgent (macOS) or systemd user service (Linux), started automatically on login
 - Creates the socket directory if it does not exist, with `0700` permissions
 - Cleans up stale sockets on startup
@@ -40,6 +42,8 @@ Remote Host (Beta)                          Local Host (Alpha)
   - If `LC_OP_TUNNEL_SOCK` is set and the socket exists: connect to the tunnel socket, send the command, reproduce the response (stdout to fd 1, stderr to fd 2, exit with the returned exit code)
   - If `LC_OP_TUNNEL_SOCK` is **not** set: find and exec the real `op` binary (pass-through mode). Discovery: search `PATH` entries, skipping any directory containing the `op-tunnel-client` binary itself (i.e., skip its own symlink). This ensures local `op` usage is completely unaffected.
 - If the socket is set but not connectable: print error `op-tunnel: tunnel not connected` to stderr, exit 1
+- If `LC_OP_TUNNEL_SOCK` is not set and no real `op` binary is found in PATH: print error `op-tunnel: op not found (install 1Password CLI or connect a tunnel)` to stderr, exit 1
+- Signal handling: on SIGINT/SIGPIPE, the client closes the socket connection. The server detects the broken connection and kills the in-flight `op` process
 
 ### 3. SSH Configuration
 
