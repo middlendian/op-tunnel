@@ -5,7 +5,7 @@ linters:
     - errcheck
     - govet
     - staticcheck
-    - deadcode
+    - unused
     - gofmt
 
 linters-settings:
