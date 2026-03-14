@@ -1,18 +1,156 @@
 #!/bin/sh
 set -e
 
-CONF_SRC="$(dirname "$0")/../share/op-tunnel/op-tunnel-sshd.conf"
+# Locate a file shipped alongside this script.
+# Tries Homebrew layout first (script in bin/, file in share/op-tunnel/),
+# then tarball layout (script and file are siblings inside dist/).
+find_dist_file() {
+    name="$1"
+    brew_path="$(dirname "$0")/../share/op-tunnel/$name"
+    tarball_path="$(dirname "$0")/$name"
+    if [ -f "$brew_path" ]; then
+        echo "$brew_path"
+    elif [ -f "$tarball_path" ]; then
+        echo "$tarball_path"
+    else
+        echo "Error: cannot find $name (looked in share/op-tunnel/ and next to this script)" >&2
+        exit 1
+    fi
+}
+
+echo ""
+echo "=== op-tunnel setup ==="
+echo ""
+
+# ─── Step 1: Configure sshd ───────────────────────────────────────────────────
+echo "=== Step 1: Configure sshd ==="
+echo ""
+echo "Why: SSH servers must allow clients to pass LC_OP_TUNNEL_SOCK."
+echo "     This environment variable tells op-tunnel-client where to find"
+echo "     the forwarded Unix socket."
+echo ""
+
+CONF_SRC="$(find_dist_file op-tunnel-sshd.conf)"
 CONF_DST="/etc/ssh/sshd_config.d/op-tunnel.conf"
 
-install -m 644 "$CONF_SRC" "$CONF_DST"
+echo "Action: sudo install -m 644 $CONF_SRC $CONF_DST"
+sudo install -m 644 "$CONF_SRC" "$CONF_DST"
+echo "Written: $CONF_DST"
 
-# Reload sshd
+echo "Action: reload sshd"
 if command -v systemctl >/dev/null 2>&1; then
-    systemctl reload sshd 2>/dev/null || systemctl reload ssh  # sshd on RHEL/Arch, ssh on Debian/Ubuntu
-elif launchctl kickstart -k system/com.openssh.sshd >/dev/null 2>&1; then
-    : # macOS Ventura+
+    sudo systemctl reload sshd 2>/dev/null || sudo systemctl reload ssh
+    echo "sshd reloaded via systemctl."
+elif sudo launchctl kickstart -k system/com.openssh.sshd >/dev/null 2>&1; then
+    echo "sshd reloaded via launchctl."
 else
-    echo "sshd config installed. Reload sshd manually to apply."
+    echo "Note: could not reload sshd automatically. Please reload it manually."
 fi
 
-echo "Done. sshd will now accept LC_OP_TUNNEL_SOCK from SSH clients."
+echo ""
+echo "Step 1 complete."
+echo ""
+
+# ─── Step 2: Configure SSH client ─────────────────────────────────────────────
+echo "=== Step 2: Configure SSH client ==="
+echo ""
+echo "Why: When you SSH to a remote host, your SSH client needs to forward"
+echo "     the op-tunnel socket and set LC_OP_TUNNEL_SOCK in the remote session."
+echo ""
+
+printf "Which hosts should use op-tunnel? [default: *.local]: "
+read -r HOST_PATTERN
+if [ -z "$HOST_PATTERN" ]; then
+    HOST_PATTERN="*.local"
+fi
+
+OP_TUNNEL_DIR="$HOME/.local/share/op-tunnel"
+SSH_CONFIG="$HOME/.ssh/config"
+INCLUDE_LINE="Include ~/.local/share/op-tunnel/ssh.config"
+
+echo "Action: create socket directories"
+mkdir -p "$OP_TUNNEL_DIR/server" "$OP_TUNNEL_DIR/client"
+echo "Created: $OP_TUNNEL_DIR/{server,client}"
+
+echo "Action: copy ssh.config"
+SSH_TEMPLATE="$(find_dist_file ssh.config)"
+cp "$SSH_TEMPLATE" "$OP_TUNNEL_DIR/ssh.config"
+echo "Copied ssh.config to $OP_TUNNEL_DIR/ssh.config"
+
+mkdir -p "$HOME/.ssh"
+touch "$SSH_CONFIG"
+
+if grep -qF "$INCLUDE_LINE" "$SSH_CONFIG" 2>/dev/null; then
+    echo "~/.ssh/config already contains the op-tunnel Include. Skipping."
+else
+    printf "\nHost %s\n    %s\n" "$HOST_PATTERN" "$INCLUDE_LINE" >> "$SSH_CONFIG"
+    echo "Added to ~/.ssh/config:"
+    echo "  Host $HOST_PATTERN"
+    echo "      $INCLUDE_LINE"
+fi
+
+echo ""
+echo "Step 2 complete."
+echo ""
+
+# ─── Step 3: Shadow op with a symlink ─────────────────────────────────────────
+echo "=== Step 3: Shadow 'op' with a symlink ==="
+echo ""
+echo "Why: op-tunnel-client proxies op commands over the tunnel when available,"
+echo "     falling back to the real op binary. A symlink (unlike a shell alias)"
+echo "     works reliably from scripts, Makefiles, IDEs, and other tools."
+echo ""
+
+CLIENT_BIN="$(command -v op-tunnel-client 2>/dev/null || true)"
+if [ -z "$CLIENT_BIN" ]; then
+    echo "Warning: op-tunnel-client not found in PATH. Skipping."
+    echo "Re-run this step after op-tunnel-client is installed."
+else
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$CLIENT_BIN" "$HOME/.local/bin/op"
+    echo "Created: ~/.local/bin/op -> $CLIENT_BIN"
+
+    # Detect shell and rc file
+    case "$SHELL" in
+        */zsh)  RC_FILE="$HOME/.zshrc" ;;
+        */bash) RC_FILE="$HOME/.bashrc" ;;
+        */fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
+        *)      RC_FILE="$HOME/.profile" ;;
+    esac
+
+    SHELL_NAME="$(basename "$SHELL")"
+
+    if [ "$SHELL_NAME" = "fish" ]; then
+        FISH_LINE="fish_add_path $HOME/.local/bin"
+        if grep -qF ".local/bin" "$RC_FILE" 2>/dev/null; then
+            echo "$RC_FILE already adds ~/.local/bin to PATH. Skipping."
+        else
+            mkdir -p "$(dirname "$RC_FILE")"
+            echo "$FISH_LINE" >> "$RC_FILE"
+            echo "Added to $RC_FILE: $FISH_LINE"
+        fi
+    else
+        PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+        if grep -qF ".local/bin" "$RC_FILE" 2>/dev/null; then
+            echo "$RC_FILE already adds ~/.local/bin to PATH. Skipping."
+        else
+            echo "$PATH_LINE" >> "$RC_FILE"
+            echo "Added to $RC_FILE: $PATH_LINE"
+        fi
+    fi
+
+    echo ""
+    echo "Note: PATH changes take effect in new shell sessions."
+    echo "To apply now: source $RC_FILE"
+fi
+
+echo ""
+echo "Step 3 complete."
+echo ""
+
+echo "=== Setup complete ==="
+echo ""
+echo "Next steps:"
+echo "  - Start the server:  brew services start op-tunnel"
+echo "  - Test the tunnel:   ssh <remote-host> op --version"
+echo ""
