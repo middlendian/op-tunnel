@@ -31,17 +31,29 @@ brew install op-tunnel
 Add to `~/.ssh/config`:
 
 ```
-Host *
-    RemoteForward ~/.local/share/op-tunnel/client/op-tunnel.sock ~/.local/share/op-tunnel/server/op-tunnel.sock
-    SetEnv LC_OP_TUNNEL_SOCK=~/.local/share/op-tunnel/client/op-tunnel.sock
-    StreamLocalBindUnlink yes
-    ServerAliveInterval 30
-    ServerAliveCountMax 6
+Host myserver
+    Include ~/.local/share/op-tunnel/ssh.config
 ```
+
+> Use specific host names, not `Host *`. The included fragment applies RemoteForward and SetEnv only to the hosts where you opt in.
 
 The server starts automatically at login (LaunchAgent on macOS, systemd user service on Linux).
 
-> **Requirement:** Remote sshd must accept `LC_*` env vars — the default on macOS and stock Ubuntu/Debian (`AcceptEnv LANG LC_*`).
+## Prerequisites
+
+**Local machine (SSH client):**
+- OpenSSH 7.3+ — standard on macOS 10.12+ and Ubuntu 18.04+
+- 1Password desktop app running with biometric auth enabled
+- `op-tunnel-server` running (auto-started by LaunchAgent/systemd after install)
+
+**Remote machine (SSH server):**
+- `AcceptEnv LC_OP_TUNNEL_SOCK` in `/etc/ssh/sshd_config`
+
+  Stock Debian/Ubuntu already includes `AcceptEnv LANG LC_*`, which covers `LC_OP_TUNNEL_SOCK` — no change needed. On other systems (macOS, RHEL, Arch), run once after installing op-tunnel on the remote:
+
+  ```bash
+  sudo op-tunnel-setup
+  ```
 
 ## Usage
 

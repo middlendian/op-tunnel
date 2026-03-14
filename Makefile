@@ -1,7 +1,7 @@
 BINDIR := ./bin
 LDFLAGS := -s -w
 
-.PHONY: build clean test test-integration
+.PHONY: build clean test test-integration install-ssh-config
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/op-tunnel-server ./cmd/op-tunnel-server
@@ -15,3 +15,9 @@ test-integration:
 
 clean:
 	rm -rf $(BINDIR)
+
+DATADIR := $(HOME)/.local/share/op-tunnel
+
+install-ssh-config:
+	mkdir -p $(DATADIR)
+	cp dist/ssh.config $(DATADIR)/ssh.config
