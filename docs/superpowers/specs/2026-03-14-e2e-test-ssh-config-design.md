@@ -128,6 +128,87 @@ A top-level `AGENTS.md` describing the project for AI-assisted development sessi
 
 ---
 
+## Section 5: Homebrew formula updates
+
+Two changes to `dist/op-tunnel.rb`:
+
+**Install `dist/ssh.config`:**
+
+In the `post_install` block, copy `dist/ssh.config` to `~/.local/share/op-tunnel/ssh.config` using `Pathname.new(Dir.home)` — the same pattern already used for the LaunchAgent:
+
+```ruby
+op_tunnel_dir = Pathname.new("#{Dir.home}/.local/share/op-tunnel")
+op_tunnel_dir.mkpath
+cp buildpath/"dist/ssh.config", op_tunnel_dir/"ssh.config"
+```
+
+Note: `var` in a Homebrew formula resolves to the Homebrew prefix var (e.g. `/opt/homebrew/var`), not the user's home. The user home must be resolved via `Dir.home`.
+
+**Update `post_install` message:**
+
+Replace the current hardcoded SSH block (which uses `Host *`) with instructions to use the installed `Include` file. The new message:
+
+```
+op-tunnel installed!
+
+The SSH config fragment has been installed to:
+  ~/.local/share/op-tunnel/ssh.config
+
+Add the following inside each Host block in ~/.ssh/config for
+hosts where you want op-tunnel active (requires OpenSSH 7.3+):
+
+  Host myserver
+      Include ~/.local/share/op-tunnel/ssh.config
+
+On each remote host, ensure sshd accepts the tunnel env var:
+  echo 'AcceptEnv LC_OP_TUNNEL_SOCK' | sudo tee -a /etc/ssh/sshd_config
+  sudo systemctl reload sshd          # Linux
+  # macOS: toggle Remote Login off/on in System Settings > General > Sharing
+  # or: sudo launchctl kickstart -k system/com.openssh.sshd  (Ventura+, may vary)
+
+The server LaunchAgent has been installed and will start on next login.
+To start it now:
+  launchctl load ~/Library/LaunchAgents/com.middlendian.op-tunnel-server.plist
+```
+
+**Update `caveats`:**
+
+Replace the current `AcceptEnv LC_*` note with the specific var name and the `Include`-based usage pattern, consistent with the above.
+
+---
+
+## Section 6: README prerequisites section
+
+Replace the current inline SSH block (which uses `Host *`) with the `Include`-based approach. Add a **Prerequisites** section after Install, covering:
+
+**Local machine (SSH client):**
+- OpenSSH 7.3+ (for `Include` inside a `Host` block) — standard on macOS 10.12+ and Ubuntu 18.04+
+- 1Password desktop app running with biometric auth enabled
+- `op-tunnel-server` running (started automatically via LaunchAgent/systemd after install)
+
+**Remote machine (SSH server):**
+- `AcceptEnv LC_OP_TUNNEL_SOCK` in `/etc/ssh/sshd_config` — required for the tunnel env var to be passed through. Because `LC_OP_TUNNEL_SOCK` matches the `LC_*` glob, no change is needed on stock Debian/Ubuntu systems (which ship with `AcceptEnv LANG LC_*` by default). macOS sshd does not accept env vars by default and requires explicit configuration.
+
+The Install section's SSH config example changes from:
+
+```
+Host *
+    RemoteForward ...
+    SetEnv ...
+    ...
+```
+
+to:
+
+```
+Host myserver
+    Include ~/.local/share/op-tunnel/ssh.config
+```
+
+with a clear note that `Host *` is intentionally avoided — use specific host names.
+
+---
+
 ## Scope: what is NOT changing
 
 - The wire protocol (`protocol/protocol.go`) — no changes
