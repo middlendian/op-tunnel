@@ -75,6 +75,9 @@ fi
 echo "==> op-tunnel-server is running."
 
 # --- 7. Pre-flight check ---
+echo "==> DEBUG: sshd container logs..."
+docker logs "$CONTAINER_NAME" 2>&1 | sed 's/^/    /' || true
+
 echo "==> DEBUG: SSH RemoteForward negotiation..."
 ssh -F "$SSH_CONFIG" -v -o BatchMode=yes op-tunnel-test true 2>&1 \
     | grep -iE "forward|socket|stream|remote|channel|request" \
