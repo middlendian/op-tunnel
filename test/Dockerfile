@@ -3,7 +3,8 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-server \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /run/sshd
+    && mkdir -p /run/sshd \
+    && mkdir -p /root/.local/share/op-tunnel/client
 
 # sshd configuration
 RUN echo 'AcceptEnv LC_OP_TUNNEL_SOCK' >> /etc/ssh/sshd_config \
