@@ -130,11 +130,40 @@ A top-level `AGENTS.md` describing the project for AI-assisted development sessi
 
 ## Section 5: Homebrew formula updates
 
-Two changes to `dist/op-tunnel.rb`:
+Four additions to `dist/op-tunnel.rb`:
 
-**Install `dist/ssh.config`:**
+**New dist files:**
 
-In the `post_install` block, copy `dist/ssh.config` to `~/.local/share/op-tunnel/ssh.config` using `Pathname.new(Dir.home)` — the same pattern already used for the LaunchAgent:
+- `dist/op-tunnel-sshd.conf` — a one-line drop-in for `/etc/ssh/sshd_config.d/`:
+  ```
+  AcceptEnv LC_OP_TUNNEL_SOCK
+  ```
+
+- `dist/op-tunnel-setup` — a simple shell script (no flags, easy to read and audit) that deploys the sshd config and reloads sshd:
+  ```sh
+  #!/bin/sh
+  set -e
+  CONF_SRC="$(dirname "$0")/../share/op-tunnel/op-tunnel-sshd.conf"
+  CONF_DST="/etc/ssh/sshd_config.d/op-tunnel.conf"
+
+  install -m 644 "$CONF_SRC" "$CONF_DST"
+
+  # Reload sshd
+  if command -v systemctl >/dev/null 2>&1; then
+      systemctl reload sshd 2>/dev/null || systemctl reload ssh  # sshd on RHEL/Arch, ssh on Debian/Ubuntu
+  elif launchctl kickstart -k system/com.openssh.sshd >/dev/null 2>&1; then
+      : # macOS Ventura+
+  else
+      echo "sshd config installed. Reload sshd manually to apply."
+  fi
+
+  echo "Done. sshd will now accept LC_OP_TUNNEL_SOCK from SSH clients."
+  ```
+  The script resolves `CONF_SRC` relative to itself so it works regardless of Homebrew prefix.
+
+**Install `dist/ssh.config` and `dist/op-tunnel-sshd.conf`:**
+
+In the `post_install` block, install the SSH client config fragment and the sshd drop-in to the user's data directory:
 
 ```ruby
 op_tunnel_dir = Pathname.new("#{Dir.home}/.local/share/op-tunnel")
@@ -142,11 +171,19 @@ op_tunnel_dir.mkpath
 cp buildpath/"dist/ssh.config", op_tunnel_dir/"ssh.config"
 ```
 
-Note: `var` in a Homebrew formula resolves to the Homebrew prefix var (e.g. `/opt/homebrew/var`), not the user's home. The user home must be resolved via `Dir.home`.
+Note: `var` in a Homebrew formula resolves to the Homebrew prefix var (e.g. `/opt/homebrew/var`), not the user's home. The user home must be resolved via `Dir.home`. `op-tunnel-sshd.conf` does not need to be copied here — `op-tunnel-setup` resolves it from the Homebrew `share/` directory via `$0`.
+
+**Install `dist/op-tunnel-setup`:**
+
+In the `install` block, install the setup script as a Homebrew-managed binary:
+
+```ruby
+bin.install "dist/op-tunnel-setup"
+```
 
 **Update `post_install` message:**
 
-Replace the current hardcoded SSH block (which uses `Host *`) with instructions to use the installed `Include` file. The new message:
+Replace the current hardcoded SSH block (which uses `Host *`) with instructions to use the installed `Include` file and the new setup script. The new message:
 
 ```
 op-tunnel installed!
@@ -160,11 +197,9 @@ hosts where you want op-tunnel active (requires OpenSSH 7.3+):
   Host myserver
       Include ~/.local/share/op-tunnel/ssh.config
 
-On each remote host, ensure sshd accepts the tunnel env var:
-  echo 'AcceptEnv LC_OP_TUNNEL_SOCK' | sudo tee -a /etc/ssh/sshd_config
-  sudo systemctl reload sshd          # Linux
-  # macOS: toggle Remote Login off/on in System Settings > General > Sharing
-  # or: sudo launchctl kickstart -k system/com.openssh.sshd  (Ventura+, may vary)
+On each remote host, run once to configure sshd:
+  sudo op-tunnel-setup
+  (Skip on stock Debian/Ubuntu — AcceptEnv LANG LC_* already covers LC_OP_TUNNEL_SOCK)
 
 The server LaunchAgent has been installed and will start on next login.
 To start it now:
@@ -173,7 +208,7 @@ To start it now:
 
 **Update `caveats`:**
 
-Replace the current `AcceptEnv LC_*` note with the specific var name and the `Include`-based usage pattern, consistent with the above.
+Replace the current `AcceptEnv LC_*` note with a reference to `op-tunnel-setup` and the `Include`-based usage pattern, consistent with the above.
 
 ---
 
