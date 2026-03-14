@@ -18,7 +18,7 @@ trap cleanup EXIT
 # --- 1. Build binaries ---
 echo "==> Building binaries..."
 go build -o "$TMPDIR_E2E/op-tunnel-server" "$REPO_ROOT/cmd/op-tunnel-server"
-go build -o "$TMPDIR_E2E/op-tunnel-client" "$REPO_ROOT/cmd/op-tunnel-client"
+GOOS=linux GOARCH=amd64 go build -o "$TMPDIR_E2E/op-tunnel-client" "$REPO_ROOT/cmd/op-tunnel-client"
 
 # --- 2. Build Docker image ---
 echo "==> Building Docker image..."
