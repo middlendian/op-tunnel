@@ -15,8 +15,22 @@ import (
 	"github.com/middlendian/op-tunnel/protocol"
 )
 
+// expandTilde expands a leading ~/ to the user's home directory.
+// sshd does not expand ~ in SetEnv values; the SSH client may or may not
+// depending on version. This ensures the path is always absolute.
+func expandTilde(path string) string {
+	if !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[2:])
+}
+
 func main() {
-	sockPath := os.Getenv(protocol.EnvTunnelSock)
+	sockPath := expandTilde(os.Getenv(protocol.EnvTunnelSock))
 	if sockPath != "" {
 		tunnelMode(sockPath, os.Args[1:])
 	} else {
