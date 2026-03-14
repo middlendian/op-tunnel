@@ -75,6 +75,11 @@ fi
 echo "==> op-tunnel-server is running."
 
 # --- 7. Pre-flight check ---
+echo "==> DEBUG: SSH RemoteForward negotiation..."
+ssh -F "$SSH_CONFIG" -v -o BatchMode=yes op-tunnel-test true 2>&1 \
+    | grep -iE "forward|socket|stream|remote|channel|request" \
+    | sed 's/^/    /' || true
+
 echo "==> Checking tunnel forwarding..."
 PREFLIGHT=$(ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
     'SOCK=$(echo "${LC_OP_TUNNEL_SOCK:-}" | sed "s|^~/|$HOME/|")
@@ -95,7 +100,7 @@ PREFLIGHT=$(ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
         echo "FAIL: socket not found at $SOCK (is op-tunnel-server running?)"
     else
         echo "PASS: socket at $SOCK"
-    fi' 2>/dev/null)
+    fi')
 echo "$PREFLIGHT" | sed 's/^/    /'
 if echo "$PREFLIGHT" | grep -q "^FAIL"; then
     echo ""
