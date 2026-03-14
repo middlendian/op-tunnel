@@ -1,0 +1,11 @@
+[Unit]
+Description=op-tunnel server - proxy 1Password CLI over SSH tunnels
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/op-tunnel-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
