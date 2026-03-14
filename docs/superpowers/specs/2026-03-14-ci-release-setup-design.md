@@ -65,7 +65,7 @@ One archive per OS/arch containing **both** binaries plus the `packaging/` files
 
 ### Homebrew Publisher (`brews`)
 
-GoReleaser pushes the generated formula to `middlendian/homebrew-tap`, file `Formula/op-tunnel.rb`, committing directly (no PR). Requires `TAP_GITHUB_TOKEN` secret with write access to the tap repo.
+GoReleaser pushes the generated formula to `middlendian/homebrew-tap`, file `Formula/op-tunnel.rb`, committing directly (no PR). This is intentional for a single-maintainer project — the release workflow itself is the review gate. Requires `TAP_GITHUB_TOKEN` secret with write access to the tap repo.
 
 ### GoReleaser Output Directory
 
@@ -163,8 +163,8 @@ Only Step 1 uses `sudo`. Steps 2 and 3 operate entirely on user-owned files.
 
 **Actions:**
 - Locates `op-tunnel-sshd.conf` relative to the script:
-  - First tries `../share/op-tunnel/op-tunnel-sshd.conf` (Homebrew layout)
-  - Falls back to `./dist/op-tunnel-sshd.conf` (tarball layout)
+  - First tries `$(dirname "$0")/../share/op-tunnel/op-tunnel-sshd.conf` (Homebrew layout: script is in `bin/`, conf is in `share/op-tunnel/`)
+  - Falls back to `$(dirname "$0")/op-tunnel-sshd.conf` (tarball layout: script and conf are siblings inside `dist/`)
 - `sudo install -m 644 <conf> /etc/ssh/sshd_config.d/op-tunnel.conf`
 - Reloads sshd:
   - Linux: `sudo systemctl reload sshd` or `sudo systemctl reload ssh`
@@ -178,6 +178,9 @@ Only Step 1 uses `sudo`. Steps 2 and 3 operate entirely on user-owned files.
 **Actions:**
 - Prompts: `Which hosts should use op-tunnel? [default: *.local]`
 - Creates `~/.local/share/op-tunnel/` directories (server/ and client/)
+- Locates `ssh.config` relative to the script using the same two-path resolution as Step 1:
+  - Homebrew: `$(dirname "$0")/../share/op-tunnel/ssh.config`
+  - Tarball: `$(dirname "$0")/ssh.config`
 - Copies `ssh.config` to `~/.local/share/op-tunnel/ssh.config`
 - Appends to `~/.ssh/config` (idempotent — skips if the block already exists for that pattern):
   ```
