@@ -24,6 +24,7 @@ func expandTilde(path string) string {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "op-tunnel: warning: could not resolve home directory: %v\n", err)
 		return path
 	}
 	return filepath.Join(home, path[2:])

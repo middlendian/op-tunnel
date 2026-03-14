@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+func TestExpandTildeNoHome(t *testing.T) {
+	orig := os.Getenv("HOME")
+	os.Unsetenv("HOME")
+	defer os.Setenv("HOME", orig)
+
+	// On systems where HOME is the only source, UserHomeDir will fail.
+	// expandTilde should return the path unchanged (with a warning to stderr).
+	result := expandTilde("~/foo")
+	if result != "~/foo" {
+		t.Errorf("expandTilde with no HOME: got %q, want %q", result, "~/foo")
+	}
+}
+
 func TestExpandTilde(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
