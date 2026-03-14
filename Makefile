@@ -34,4 +34,4 @@ DATADIR := $(HOME)/.local/share/op-tunnel
 
 install-ssh-config:
 	mkdir -p $(DATADIR)
-	cp dist/ssh.config $(DATADIR)/ssh.config
+	cp packaging/ssh.config $(DATADIR)/ssh.config
