@@ -15,6 +15,11 @@ class OpTunnel < Formula
     # Service files
     prefix.install "dist/com.middlendian.op-tunnel-server.plist"
     prefix.install "dist/op-tunnel-server.service"
+
+    # SSH distribution files — ssh.config is installed here so it is
+    # available via share/"op-tunnel" in post_install (buildpath is nil there)
+    (share/"op-tunnel").install "dist/op-tunnel-sshd.conf", "dist/ssh.config"
+    bin.install "dist/op-tunnel-setup"
   end
 
   def post_install
@@ -28,16 +33,25 @@ class OpTunnel < Formula
     launch_agent_dir.mkpath
     ln_sf plist, launch_agent_dir/"com.middlendian.op-tunnel-server.plist"
 
+    # Install SSH client config fragment
+    op_tunnel_dir = Pathname.new("#{Dir.home}/.local/share/op-tunnel")
+    op_tunnel_dir.mkpath
+    cp share/"op-tunnel"/"ssh.config", op_tunnel_dir/"ssh.config"
+
     ohai "op-tunnel installed!"
     puts <<~EOS
-      Add to your ~/.ssh/config:
+      The SSH config fragment has been installed to:
+        ~/.local/share/op-tunnel/ssh.config
 
-        Host *
-            RemoteForward ~/.local/share/op-tunnel/client/op-tunnel.sock ~/.local/share/op-tunnel/server/op-tunnel.sock
-            SetEnv LC_OP_TUNNEL_SOCK=~/.local/share/op-tunnel/client/op-tunnel.sock
-            StreamLocalBindUnlink yes
-            ServerAliveInterval 30
-            ServerAliveCountMax 6
+      Add the following inside each Host block in ~/.ssh/config for
+      hosts where you want op-tunnel active (requires OpenSSH 7.3+):
+
+        Host myserver
+            Include ~/.local/share/op-tunnel/ssh.config
+
+      On each remote host, run once to configure sshd:
+        sudo op-tunnel-setup
+        (Skip on stock Debian/Ubuntu — AcceptEnv LANG LC_* already covers LC_OP_TUNNEL_SOCK)
 
       The server LaunchAgent has been installed and will start on next login.
       To start it now:
@@ -51,7 +65,12 @@ class OpTunnel < Formula
       When LC_OP_TUNNEL_SOCK is set (via SSH), op commands are tunneled.
       Otherwise, the real op binary is called directly.
 
-      Ensure the remote sshd has: AcceptEnv LC_*
+      To activate tunneling for a remote host, add inside its Host block
+      in ~/.ssh/config:
+        Include ~/.local/share/op-tunnel/ssh.config
+
+      On remote hosts (except stock Debian/Ubuntu), configure sshd once:
+        sudo op-tunnel-setup
     EOS
   end
 
