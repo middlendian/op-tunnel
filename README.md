@@ -28,7 +28,7 @@ On your **local machine** (the one hosting the 1Password desktop app):
     ```
 
 > [!CAUTION]
-> Use specific host names, not `Host *`. This way, the included fragment applies RemoteForward **only** for
+> Use specific host names, not `Host *`. This way, the included fragment applies `RemoteForward` **only** for
 > trusted hosts where you opt in. Patterns like `Host *.local` or `Host *.example.com` may also be useful to trust hosts
 > hosts in specific subdomains. See [ssh_config(5)](https://man.openbsd.org/ssh_config)
 
@@ -53,26 +53,32 @@ Remote Host                                 Local Host
 ```
 
 `op-tunnel-server` listens on a Unix socket on your local machine. An SSH `RemoteForward` directive maps that socket to
-the remote machine. `op-tunnel-client` is symlinked as `~/.local/bin/op` to serve as a wrapper. When `LC_OP_TUNNEL_SOCK`
-is set, it sends the command over the socket; the server executes it locally and returns stdout, stderr, and exit code.
-When `LC_OP_TUNNEL_SOCK` is unset, the local `op` binary is called directly.
+the remote machine, where `op-tunnel-client` is symlinked as `~/.local/bin/op` to serve as a wrapper. When the remote
+socket is active, it sends the command over the socket; the server executes `op` locally and returns stdout, stderr, and
+exit code. When the remote socket is inactive, `op-tunnel-client` is a passthrough for the local `op` binary.
 
-Only allowlisted `OP_*` environment variables are forwarded. The socket is owner-only (`0600`) and unique per remote
-user. The trust model is equivalent to SSH agent forwarding.
+### Security model
 
-## Prerequisites
+The trust model is equivalent to SSH agent forwarding between two trusted hosts. Only allowlisted `OP_*` environment
+variables are forwarded. The socket is owner-only (`0600`) and unique per remote user. Access to 1Password items is
+governed by the same local security settings as the `op` CLI itself.
 
-**Local machine (SSH client):**
+### Supported `op` CLI features
 
-- OpenSSH 7.3+ — standard on macOS 10.12+ and Ubuntu 18.04+
-- 1Password desktop app running with CLI access enabled (for biometric auth according to your security settings)
+Linux and macOS are supported for both local and remote machines, and either `arm64` or `x86_64` architectures.
 
-**Remote machine (SSH server):**
-
-- `AcceptEnv LC_OP_TUNNEL_SOCK` in `/etc/ssh/sshd_config`
-
-  Stock Debian/Ubuntu already includes `AcceptEnv LANG LC_*`, which covers `LC_OP_TUNNEL_SOCK` — no change needed. On
-  other systems (macOS, RHEL, Arch), run once after installing op-tunnel on the remote:
+| Feature                         | Supported on remote machine?            |
+|---------------------------------|-----------------------------------------|
+| Creating vault items/documents  | Yes                                     |
+| Reading vault items/documents   | Yes                                     |
+| Updating vault items/documents  | Yes                                     |
+| Deleting vault items/documents  | Yes                                     |
+| Using `op` in scripts           | Yes, assuming they use standard `$PATH` |
+| `op inject`                     | Not yet                                 |
+| User management and `op signin` | Use your local `op` CLI for this        |
+| `op run --` wrappers            | Probably not                            |
+| Direct 1Password SDK usage      | Probably not                            |
+| Other advanced functions        | Mileage may vary                        |
 
 ## Usage
 
@@ -85,10 +91,8 @@ op item list # This will prompt for authentication of "op-tunnel-server" on your
 op item get GitHub --fields password # Depending on your 1Password settings, re-prompts may be required at intervals
 ```
 
-Local `op` usage is completely unaffected. When `LC_OP_TUNNEL_SOCK` is not set (i.e., outside an SSH session), the
-client passes through to the real `op` binary.
-
-## How it works
+Local `op` usage is completely unaffected. When the remote socket is inactive (i.e., outside an SSH session), the
+`op-tunnel-client` passes through to the real `op` binary locally.
 
 ## License
 
