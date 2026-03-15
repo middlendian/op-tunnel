@@ -44,6 +44,7 @@ archives:
     name_template: "op-tunnel-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     files:
+      - src: LICENSE
       - src: packaging/ssh.config
         dst: dist
         strip_parent: true
@@ -69,10 +70,8 @@ brews:
       email: bot@goreleaser.com
     homepage: "https://github.com/middlendian/op-tunnel"
     description: "Tunnel 1Password CLI (op) commands over SSH"
-    license: "MIT"
-    dependencies:
-      - name: 1password-cli
-        type: cask
+    license: "GPL-3.0-only"
+
     service: |
       run [opt_bin/"op-tunnel-server"]
       keep_alive true
@@ -84,6 +83,9 @@ brews:
       (share/"op-tunnel").install "dist/op-tunnel-sshd.conf", "dist/ssh.config"
       bin.install "dist/op-tunnel-setup"
     caveats: |
+      1Password CLI is required but must be installed separately:
+        brew install --cask 1password-cli
+
       Run op-tunnel-setup to complete configuration:
         op-tunnel-setup
 
