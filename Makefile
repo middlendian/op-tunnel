@@ -1,7 +1,7 @@
 BINDIR := ./bin
 LDFLAGS := -s -w
 
-.PHONY: build build-mac build-linux build-all clean test test-integration install-ssh-config
+.PHONY: build build-mac build-linux build-all clean test test-integration lint check install-ssh-config
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/op-tunnel-server ./cmd/op-tunnel-server
@@ -26,6 +26,11 @@ test:
 
 test-integration:
 	go test ./... -tags integration
+
+lint:
+	golangci-lint run ./...
+
+check: test lint
 
 clean:
 	rm -rf $(BINDIR)

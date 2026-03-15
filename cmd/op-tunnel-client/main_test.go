@@ -8,8 +8,10 @@ import (
 
 func TestExpandTildeNoHome(t *testing.T) {
 	orig := os.Getenv("HOME")
-	os.Unsetenv("HOME")
-	defer os.Setenv("HOME", orig)
+	if err := os.Unsetenv("HOME"); err != nil {
+		t.Fatalf("Unsetenv: %v", err)
+	}
+	defer func() { _ = os.Setenv("HOME", orig) }()
 
 	// On systems where HOME is the only source, UserHomeDir will fail.
 	// expandTilde should return the path unchanged (with a warning to stderr).

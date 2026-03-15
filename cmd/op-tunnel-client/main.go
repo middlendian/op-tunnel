@@ -51,7 +51,7 @@ func tunnelMode(sockPath string, args []string) {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGPIPE)
 	go func() {
 		<-sigCh
-		conn.Close()
+		_ = conn.Close()
 		os.Exit(1)
 	}()
 
@@ -73,7 +73,7 @@ func tunnelMode(sockPath string, args []string) {
 		os.Exit(1)
 	}
 
-	conn.Close()
+	_ = conn.Close()
 
 	if resp.Error != "" {
 		fmt.Fprintf(os.Stderr, "op-tunnel: %s\n", resp.Error)
@@ -86,7 +86,7 @@ func tunnelMode(sockPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "op-tunnel: decoding stdout: %v\n", err)
 			os.Exit(1)
 		}
-		os.Stdout.Write(decoded)
+		_, _ = os.Stdout.Write(decoded)
 	}
 
 	if resp.Stderr != "" {
@@ -95,7 +95,7 @@ func tunnelMode(sockPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "op-tunnel: decoding stderr: %v\n", err)
 			os.Exit(1)
 		}
-		os.Stderr.Write(decoded)
+		_, _ = os.Stderr.Write(decoded)
 	}
 
 	os.Exit(resp.ExitCode)

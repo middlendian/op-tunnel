@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listening on %s: %v", socketPath, err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	// Set socket permissions
 	if err := os.Chmod(socketPath, 0600); err != nil {
@@ -59,8 +59,8 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("op-tunnel-server: shutting down")
-		listener.Close()
-		os.Remove(socketPath)
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
 	}()
 
 	for {
@@ -83,7 +83,7 @@ func main() {
 }
 
 func handleConnection(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	req, err := protocol.ReadRequest(conn)
 	if err != nil {
