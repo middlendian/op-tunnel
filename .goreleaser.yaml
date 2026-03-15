@@ -72,6 +72,7 @@ brews:
     license: "MIT"
     dependencies:
       - name: 1password-cli
+        type: cask
     service: |
       run [opt_bin/"op-tunnel-server"]
       keep_alive true
