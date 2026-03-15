@@ -59,8 +59,12 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("op-tunnel-server: shutting down")
-		_ = listener.Close()
-		_ = os.Remove(socketPath)
+		if err := listener.Close(); err != nil {
+			log.Printf("closing listener: %v", err)
+		}
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("removing socket: %v", err)
+		}
 	}()
 
 	for {
@@ -93,7 +97,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 
 	if req.V != protocol.ProtocolVersion {
 		resp := protocol.ErrorResponse(fmt.Sprintf("unsupported protocol version: %d", req.V))
-		_ = protocol.SendResponse(conn, resp)
+		if err := protocol.SendResponse(conn, resp); err != nil {
+			log.Printf("sending error response: %v", err)
+		}
 		return
 	}
 
@@ -101,7 +107,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	opPath, err := exec.LookPath("op")
 	if err != nil {
 		resp := protocol.ErrorResponse("op binary not found in PATH")
-		_ = protocol.SendResponse(conn, resp)
+		if err := protocol.SendResponse(conn, resp); err != nil {
+			log.Printf("sending error response: %v", err)
+		}
 		return
 	}
 
@@ -131,14 +139,18 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			resp := protocol.ErrorResponse("command timed out")
-			_ = protocol.SendResponse(conn, resp)
+			if err := protocol.SendResponse(conn, resp); err != nil {
+				log.Printf("sending error response: %v", err)
+			}
 			return
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
 			resp := protocol.ErrorResponse(fmt.Sprintf("executing op: %v", err))
-			_ = protocol.SendResponse(conn, resp)
+			if err := protocol.SendResponse(conn, resp); err != nil {
+				log.Printf("sending error response: %v", err)
+			}
 			return
 		}
 	}
@@ -149,7 +161,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 		Stdout:   base64.StdEncoding.EncodeToString(stdout.Bytes()),
 		Stderr:   base64.StdEncoding.EncodeToString(stderr.Bytes()),
 	}
-	_ = protocol.SendResponse(conn, resp)
+	if err := protocol.SendResponse(conn, resp); err != nil {
+		log.Printf("sending response: %v", err)
+	}
 }
 
 func buildEnv(reqEnv map[string]string) []string {

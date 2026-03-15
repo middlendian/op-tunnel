@@ -86,7 +86,10 @@ func tunnelMode(sockPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "op-tunnel: decoding stdout: %v\n", err)
 			os.Exit(1)
 		}
-		_, _ = os.Stdout.Write(decoded)
+		if _, err := os.Stdout.Write(decoded); err != nil {
+			fmt.Fprintf(os.Stderr, "op-tunnel: writing stdout: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if resp.Stderr != "" {
