@@ -9,7 +9,9 @@ jobs:
   release:
     name: GoReleaser
     runs-on: ubuntu-latest
-    environment: middlendian/tap
+    environment:
+      name: middlendian/tap
+      url: https://github.com/middlendian/homebrew-tap/blob/main/Formula/op-tunnel.rb
     permissions:
       contents: write
     steps:
