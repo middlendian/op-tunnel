@@ -8,6 +8,3 @@ linters:
     - unused
     - gofmt
 
-linters-settings:
-  gofmt:
-    simplify: true
