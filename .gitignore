@@ -2,3 +2,4 @@
 /.worktrees/
 test/op-tunnel-client
 /.idea/
+_dist/

@@ -1,0 +1,91 @@
+version: 2
+
+project_name: op-tunnel
+dist: _dist
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: op-tunnel-server
+    main: ./cmd/op-tunnel-server
+    binary: op-tunnel-server
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+  - id: op-tunnel-client
+    main: ./cmd/op-tunnel-client
+    binary: op-tunnel-client
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: op-tunnel
+    builds:
+      - op-tunnel-server
+      - op-tunnel-client
+    name_template: "op-tunnel-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: tar.gz
+    files:
+      - src: packaging/ssh.config
+        dst: dist
+        strip_parent: true
+      - src: packaging/op-tunnel-sshd.conf
+        dst: dist
+        strip_parent: true
+      - src: packaging/op-tunnel-setup
+        dst: dist
+        strip_parent: true
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: op-tunnel
+    repository:
+      owner: middlendian
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    homepage: "https://github.com/middlendian/op-tunnel"
+    description: "Tunnel 1Password CLI (op) commands over SSH"
+    license: "MIT"
+    dependencies:
+      - name: 1password-cli
+    service: |
+      run [opt_bin/"op-tunnel-server"]
+      keep_alive true
+      log_path var/"log/op-tunnel-server.log"
+      error_log_path var/"log/op-tunnel-server.log"
+    install: |
+      bin.install "op-tunnel-server"
+      bin.install "op-tunnel-client"
+      (share/"op-tunnel").install "dist/op-tunnel-sshd.conf", "dist/ssh.config"
+      bin.install "dist/op-tunnel-setup"
+    caveats: |
+      Run op-tunnel-setup to complete configuration:
+        op-tunnel-setup
+
+      See https://github.com/middlendian/op-tunnel for full instructions.
+    test: |
+      assert_predicate bin/"op-tunnel-server", :executable?
+      assert_predicate bin/"op-tunnel-client", :executable?

@@ -41,7 +41,7 @@ Host op-tunnel-test
     IdentityFile $TMPDIR_E2E/id_ed25519
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
-    Include $REPO_ROOT/dist/ssh.config
+    Include $REPO_ROOT/packaging/ssh.config
 EOF
 
 # --- 5. Start container ---
