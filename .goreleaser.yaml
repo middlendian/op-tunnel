@@ -77,6 +77,7 @@ brews:
       keep_alive true
       log_path var/"log/op-tunnel-server.log"
       error_log_path var/"log/op-tunnel-server.log"
+      environment_variables PATH: "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
     install: |
       bin.install "op-tunnel-server"
       bin.install "op-tunnel-client"
