@@ -49,6 +49,7 @@ Stdout and stderr are base64-encoded. Exit code `-1` indicates a tunnel-level er
 
 ## Important conventions
 
+- **No commits on main branch**: all work should be committed to a feature branch, merges to main happen via pull requests.
 - **No shell injection**: args are passed as an array to `exec`, never through a shell.
 - **Allowlisted env vars**: only specific `OP_*` vars are forwarded (see `protocol.AllowedEnvVars`).
 - **Socket permissions**: `0700` for the socket directory, `0600` for the socket file (owner-only).
