@@ -93,7 +93,7 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 
 	if req.V != protocol.ProtocolVersion {
 		resp := protocol.ErrorResponse(fmt.Sprintf("unsupported protocol version: %d", req.V))
-		protocol.SendResponse(conn, resp)
+		_ = protocol.SendResponse(conn, resp)
 		return
 	}
 
@@ -101,7 +101,7 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	opPath, err := exec.LookPath("op")
 	if err != nil {
 		resp := protocol.ErrorResponse("op binary not found in PATH")
-		protocol.SendResponse(conn, resp)
+		_ = protocol.SendResponse(conn, resp)
 		return
 	}
 
@@ -112,7 +112,7 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	// Monitor connection: if client disconnects, cancel the command
 	go func() {
 		buf := make([]byte, 1)
-		conn.Read(buf) // blocks until EOF or error (client disconnect)
+		_, _ = conn.Read(buf) // blocks until EOF or error (client disconnect)
 		cancel()
 	}()
 
@@ -131,14 +131,14 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			resp := protocol.ErrorResponse("command timed out")
-			protocol.SendResponse(conn, resp)
+			_ = protocol.SendResponse(conn, resp)
 			return
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
 			resp := protocol.ErrorResponse(fmt.Sprintf("executing op: %v", err))
-			protocol.SendResponse(conn, resp)
+			_ = protocol.SendResponse(conn, resp)
 			return
 		}
 	}
@@ -149,7 +149,7 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 		Stdout:   base64.StdEncoding.EncodeToString(stdout.Bytes()),
 		Stderr:   base64.StdEncoding.EncodeToString(stderr.Bytes()),
 	}
-	protocol.SendResponse(conn, resp)
+	_ = protocol.SendResponse(conn, resp)
 }
 
 func buildEnv(reqEnv map[string]string) []string {

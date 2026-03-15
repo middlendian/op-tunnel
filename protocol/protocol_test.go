@@ -86,7 +86,9 @@ func TestFilterEnv(t *testing.T) {
 
 func TestFilterEnvEmpty(t *testing.T) {
 	for _, v := range AllowedEnvVars {
-		os.Unsetenv(v)
+		if err := os.Unsetenv(v); err != nil {
+			t.Fatalf("Unsetenv(%q): %v", v, err)
+		}
 	}
 
 	filtered := FilterEnv()
