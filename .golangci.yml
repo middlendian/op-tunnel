@@ -6,5 +6,7 @@ linters:
     - govet
     - staticcheck
     - unused
-    - gofmt
 
+formatters:
+  enable:
+    - gofmt
