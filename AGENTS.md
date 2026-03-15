@@ -27,10 +27,9 @@ Remote Host                                 Local Host
 | `cmd/op-tunnel-server/main.go` | Local daemon: listens on Unix socket, executes real `op` |
 | `cmd/op-tunnel-client/main.go` | Remote stub: tunnel mode if `LC_OP_TUNNEL_SOCK` set, else passthrough |
 | `protocol/protocol.go` | Wire protocol: JSON over Unix socket, 4-byte big-endian length prefix |
-| `dist/ssh.config` | SSH client config fragment (RemoteForward + SetEnv + StreamLocalBindUnlink) |
-| `dist/op-tunnel-sshd.conf` | sshd drop-in: `AcceptEnv LC_OP_TUNNEL_SOCK` |
-| `dist/op-tunnel-setup` | Shell script: installs sshd drop-in and reloads sshd (run with sudo on remote) |
-| `dist/op-tunnel.rb` | Homebrew formula |
+| `packaging/ssh.config` | SSH client config fragment (RemoteForward + SetEnv + StreamLocalBindUnlink) |
+| `packaging/op-tunnel-sshd.conf` | sshd drop-in: `AcceptEnv LC_OP_TUNNEL_SOCK` |
+| `packaging/op-tunnel-setup` | Shell script: installs sshd drop-in and reloads sshd (run with sudo on remote) |
 | `test/e2e.sh` | End-to-end test via Docker + SSH |
 
 ## Wire protocol
@@ -61,7 +60,7 @@ Stdout and stderr are base64-encoded. Exit code `-1` indicates a tunnel-level er
 make build              # builds bin/op-tunnel-server and bin/op-tunnel-client
 make test               # runs unit tests
 make test-integration   # runs integration tests (require no external deps)
-make install-ssh-config # copies dist/ssh.config to ~/.local/share/op-tunnel/ssh.config
+make install-ssh-config # copies packaging/ssh.config to ~/.local/share/op-tunnel/ssh.config
 bash test/e2e.sh        # end-to-end test (requires Docker + op-tunnel-server running locally)
 ```
 

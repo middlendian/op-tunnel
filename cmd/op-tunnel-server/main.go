@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listening on %s: %v", socketPath, err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	// Set socket permissions
 	if err := os.Chmod(socketPath, 0600); err != nil {
@@ -59,8 +59,12 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("op-tunnel-server: shutting down")
-		listener.Close()
-		os.Remove(socketPath)
+		if err := listener.Close(); err != nil {
+			log.Printf("closing listener: %v", err)
+		}
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("removing socket: %v", err)
+		}
 	}()
 
 	for {
@@ -83,7 +87,7 @@ func main() {
 }
 
 func handleConnection(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	req, err := protocol.ReadRequest(conn)
 	if err != nil {
@@ -93,7 +97,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 
 	if req.V != protocol.ProtocolVersion {
 		resp := protocol.ErrorResponse(fmt.Sprintf("unsupported protocol version: %d", req.V))
-		protocol.SendResponse(conn, resp)
+		if err := protocol.SendResponse(conn, resp); err != nil {
+			log.Printf("sending error response: %v", err)
+		}
 		return
 	}
 
@@ -101,7 +107,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	opPath, err := exec.LookPath("op")
 	if err != nil {
 		resp := protocol.ErrorResponse("op binary not found in PATH")
-		protocol.SendResponse(conn, resp)
+		if err := protocol.SendResponse(conn, resp); err != nil {
+			log.Printf("sending error response: %v", err)
+		}
 		return
 	}
 
@@ -112,7 +120,7 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	// Monitor connection: if client disconnects, cancel the command
 	go func() {
 		buf := make([]byte, 1)
-		conn.Read(buf) // blocks until EOF or error (client disconnect)
+		_, _ = conn.Read(buf) // blocks until EOF or error (client disconnect)
 		cancel()
 	}()
 
@@ -131,14 +139,18 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			resp := protocol.ErrorResponse("command timed out")
-			protocol.SendResponse(conn, resp)
+			if err := protocol.SendResponse(conn, resp); err != nil {
+				log.Printf("sending error response: %v", err)
+			}
 			return
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
 			resp := protocol.ErrorResponse(fmt.Sprintf("executing op: %v", err))
-			protocol.SendResponse(conn, resp)
+			if err := protocol.SendResponse(conn, resp); err != nil {
+				log.Printf("sending error response: %v", err)
+			}
 			return
 		}
 	}
@@ -149,7 +161,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 		Stdout:   base64.StdEncoding.EncodeToString(stdout.Bytes()),
 		Stderr:   base64.StdEncoding.EncodeToString(stderr.Bytes()),
 	}
-	protocol.SendResponse(conn, resp)
+	if err := protocol.SendResponse(conn, resp); err != nil {
+		log.Printf("sending response: %v", err)
+	}
 }
 
 func buildEnv(reqEnv map[string]string) []string {
