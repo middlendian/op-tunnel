@@ -31,6 +31,7 @@ lint:
 	golangci-lint run ./...
 
 check: test lint
+	goreleaser check || true  # brews deprecation warning is intentional (needed for service support)
 
 clean:
 	rm -rf $(BINDIR)

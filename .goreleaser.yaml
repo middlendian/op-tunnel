@@ -38,11 +38,11 @@ builds:
 
 archives:
   - id: op-tunnel
-    builds:
+    ids:
       - op-tunnel-server
       - op-tunnel-client
     name_template: "op-tunnel-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
-    format: tar.gz
+    formats: [tar.gz]
     files:
       - src: packaging/ssh.config
         dst: dist
@@ -72,6 +72,7 @@ brews:
     license: "MIT"
     dependencies:
       - name: 1password-cli
+        type: cask
     service: |
       run [opt_bin/"op-tunnel-server"]
       keep_alive true
