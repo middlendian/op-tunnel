@@ -20,7 +20,7 @@ The current client-side socket is placed at `/tmp/op-tunnel-client.sock` — a f
 ## Non-Goals
 
 - Changing the server socket location (`~/.local/share/op-tunnel/server/op-tunnel.sock`).
-- Supporting `LC_OP_TUNNEL_SOCK` override for custom paths (no change to existing behaviour).
+- Supporting `LC_OP_TUNNEL_SOCK` override for custom paths (the env var mechanism is unchanged; only its default value changes).
 
 ## Design
 
@@ -32,6 +32,8 @@ The current client-side socket is placed at `/tmp/op-tunnel-client.sock` — a f
 | `~/.local/share/op-tunnel/client/op-tunnel.sock` | Symlink → `/tmp/op-tunnel.<username>.sock`. Persistent. Created once by `op-tunnel-setup` on the remote host. |
 
 The symlink provides a stable, home-dir-relative path that survives reboots. It simply does not resolve until SSH connects and creates the socket. `op-tunnel-client` already expands `~/` in `LC_OP_TUNNEL_SOCK`, so it follows the symlink transparently.
+
+When `LC_OP_TUNNEL_SOCK` is set but the socket does not exist (symlink dangling — i.e., no active SSH session), `op-tunnel-client` will fail to connect and print `op-tunnel: tunnel not connected`, then exit non-zero. This is the expected failure mode and is unchanged from current behaviour.
 
 ### `ssh.config` changes
 
@@ -51,10 +53,13 @@ ServerAliveInterval 30
 Add a step on the **remote** host (no `sudo` required):
 
 ```sh
+mkdir -p "$HOME/.local/share/op-tunnel/client"
 ln -sf "/tmp/op-tunnel.$USER.sock" "$HOME/.local/share/op-tunnel/client/op-tunnel.sock"
 ```
 
-The target directory (`~/.local/share/op-tunnel/client/`) is already created by the existing setup step. The symlink is idempotent (`-sf` overwrites if present).
+`mkdir -p` is included so the step is self-contained regardless of whether the directory was previously created. The symlink is idempotent (`-sf` overwrites if present).
+
+**Constraint:** `$USER` must match the SSH login username (`%r`). This is true in the normal case. It breaks if the user SSHes with `ssh -l otheruser host` or has a `User` directive in `~/.ssh/config` that differs from their local username. In those cases, the symlink target will not match the forwarded socket name. This is an acceptable limitation — `op-tunnel-setup` should be run as the same user that will receive SSH connections.
 
 ### `protocol.go`
 
@@ -72,17 +77,14 @@ The existing test case for `~/.local/share/op-tunnel/client/op-tunnel.sock` tild
 
 ## Docker / VM mounting
 
-To expose the tunnel inside a container:
+To expose the tunnel inside a container, mount the socket file directly and set the env var explicitly (simplest and most reliable):
 
 ```sh
-# Mount the socket file directly
 docker run -v /tmp/op-tunnel.$(whoami).sock:/tmp/op-tunnel.$(whoami).sock \
            -e LC_OP_TUNNEL_SOCK=/tmp/op-tunnel.$(whoami).sock ...
-
-# Or mount the whole client dir (symlink included; target must also be accessible)
-docker run -v ~/.local/share/op-tunnel/client:/root/.local/share/op-tunnel/client \
-           -v /tmp/op-tunnel.$(whoami).sock:/tmp/op-tunnel.$(whoami).sock ...
 ```
+
+Mounting the symlink directory alone is not sufficient — the symlink's target (`/tmp/op-tunnel.<user>.sock`) must also be reachable inside the container, which means mounting the socket file directly anyway. The simplest approach is always to mount and reference the socket file directly.
 
 ## Summary of changes
 
