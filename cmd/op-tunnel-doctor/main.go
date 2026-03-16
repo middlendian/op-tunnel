@@ -71,7 +71,10 @@ func main() {
 	}
 
 	// 3. Real op binary
-	self, _ := os.Executable()
+	self, err := os.Executable()
+	if err != nil {
+		warn("Cannot determine own executable path", fmt.Sprintf("%v", err))
+	}
 	realOp := oppath.FindRealOp(self, os.Getenv("PATH"))
 	if realOp != "" {
 		pass(fmt.Sprintf("Real op binary: %s", realOp))

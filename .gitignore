@@ -1,5 +1,8 @@
 /bin/
 /.worktrees/
 test/op-tunnel-client
+/op-tunnel-server
+/op-tunnel-client
+/op-tunnel-doctor
 /.idea/
 _dist/
