@@ -62,8 +62,11 @@ Stdout and stderr are base64-encoded. Exit code `-1` indicates a tunnel-level er
 make build              # builds bin/op-tunnel-server, bin/op-tunnel-client, and bin/op-tunnel-doctor
 make test               # runs unit tests
 make test-integration   # runs integration tests (require no external deps)
+make check              # runs tests + golangci-lint + goreleaser check
 bash test/e2e.sh        # end-to-end test (requires Docker + op-tunnel-server running locally)
 ```
+
+**Before finishing work, always run `make check`** to ensure tests pass, lint is clean, and goreleaser config is valid. Do not commit code that fails `make check`.
 
 ## Specs and plans
 
