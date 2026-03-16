@@ -6,46 +6,36 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/term"
 
+	"github.com/middlendian/op-tunnel/oppath"
 	"github.com/middlendian/op-tunnel/protocol"
 )
 
-// expandTilde expands a leading ~/ to the user's home directory.
-// sshd does not expand ~ in SetEnv values; the SSH client may or may not
-// depending on version. This ensures the path is always absolute.
-func expandTilde(path string) string {
-	if !strings.HasPrefix(path, "~/") {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "op-tunnel: warning: could not resolve home directory: %v\n", err)
-		return path
-	}
-	return filepath.Join(home, path[2:])
-}
-
 func main() {
-	sockPath := expandTilde(os.Getenv(protocol.EnvTunnelSock))
-	if sockPath != "" {
-		tunnelMode(sockPath, os.Args[1:])
+	tunnelID := os.Getenv(oppath.EnvTunnelID)
+	if tunnelID != "" {
+		user := os.Getenv("USER")
+		if user == "" {
+			fmt.Fprintln(os.Stderr, "op-tunnel: USER environment variable not set")
+			os.Exit(1)
+		}
+		sockPath := oppath.ClientSocketPath(user, tunnelID)
+		conn, err := net.DialTimeout("unix", sockPath, 100*time.Millisecond)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "op-tunnel: tunnel not connected")
+			os.Exit(1)
+		}
+		tunnelMode(conn, os.Args[1:])
 	} else {
 		passthroughMode(os.Args[1:])
 	}
 }
 
-func tunnelMode(sockPath string, args []string) {
-	conn, err := net.Dial("unix", sockPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "op-tunnel: tunnel not connected")
-		os.Exit(1)
-	}
-
+func tunnelMode(conn net.Conn, args []string) {
 	// Close connection on signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGPIPE)
@@ -105,7 +95,12 @@ func tunnelMode(sockPath string, args []string) {
 }
 
 func passthroughMode(args []string) {
-	realOp := findRealOp()
+	self, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "op-tunnel: cannot determine own path")
+		os.Exit(1)
+	}
+	realOp := oppath.FindRealOp(self, os.Getenv("PATH"))
 	if realOp == "" {
 		fmt.Fprintln(os.Stderr, "op-tunnel: op not found (install 1Password CLI or connect a tunnel)")
 		os.Exit(1)
@@ -116,37 +111,4 @@ func passthroughMode(args []string) {
 		fmt.Fprintf(os.Stderr, "op-tunnel: exec %s: %v\n", realOp, err)
 		os.Exit(1)
 	}
-}
-
-// findRealOp searches PATH for the real `op` binary, skipping our own directory.
-func findRealOp() string {
-	self, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	self, err = filepath.EvalSymlinks(self)
-	if err != nil {
-		return ""
-	}
-	selfDir := filepath.Dir(self)
-
-	pathEnv := os.Getenv("PATH")
-	for _, dir := range strings.Split(pathEnv, string(os.PathListSeparator)) {
-		if dir == "" {
-			continue
-		}
-		// Resolve symlinks on the PATH dir too, so we catch Homebrew symlink dirs
-		resolvedDir, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			resolvedDir = dir
-		}
-		if resolvedDir == selfDir {
-			continue
-		}
-		candidate := filepath.Join(dir, "op")
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0111 != 0 {
-			return candidate
-		}
-	}
-	return ""
 }
