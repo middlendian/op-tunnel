@@ -14,7 +14,7 @@ Remote Host                                 Local Host
 │  op-tunnel-client         │  SSH socket   │  op-tunnel-server         │
 │  (installed as `op`)      ├──────────────►│       │                   │
 │                           │  forward      │       ▼                   │
-│  LC_OP_TUNNEL_SOCK set?   │◄──────────────│  exec real `op`           │
+│  LC_OP_TUNNEL_ID set?     │◄──────────────│  exec real `op`           │
 │  yes → tunnel             │  stdout/      │  return results           │
 │  no  → real `op`          │  stderr/rc    │                           │
 └───────────────────────────┘               └───────────────────────────┘
@@ -25,11 +25,13 @@ Remote Host                                 Local Host
 | Path | Purpose |
 |------|---------|
 | `cmd/op-tunnel-server/main.go` | Local daemon: listens on Unix socket, executes real `op` |
-| `cmd/op-tunnel-client/main.go` | Remote stub: tunnel mode if `LC_OP_TUNNEL_SOCK` set, else passthrough |
+| `cmd/op-tunnel-client/main.go` | Remote stub: tunnel mode if `LC_OP_TUNNEL_ID` set, else passthrough |
 | `protocol/protocol.go` | Wire protocol: JSON over Unix socket, 4-byte big-endian length prefix |
-| `packaging/ssh.config` | SSH client config fragment (RemoteForward + SetEnv + StreamLocalBindUnlink) |
-| `packaging/op-tunnel-sshd.conf` | sshd drop-in: `AcceptEnv LC_OP_TUNNEL_SOCK` |
-| `packaging/op-tunnel-setup` | Shell script: installs sshd drop-in and reloads sshd (run with sudo on remote) |
+| `packaging/ssh.config.tmpl` | SSH config template with @@TUNNEL_ID@@ and @@LOCAL_USER@@ placeholders |
+| `packaging/op-tunnel-sshd.conf` | sshd drop-in: `AcceptEnv LC_OP_TUNNEL_ID`, `StreamLocalBindUnlink yes` |
+| `packaging/op-tunnel-setup` | Post-install script: generates tunnel ID, ssh.config, symlink, socket dirs |
+| `oppath/oppath.go` | Shared socket path construction, config dir, binary lookup |
+| `cmd/op-tunnel-doctor/main.go` | Diagnostic tool: checks server, tunnel, symlink, config |
 | `test/e2e.sh` | End-to-end test via Docker + SSH |
 
 ## Wire protocol
@@ -51,17 +53,15 @@ Stdout and stderr are base64-encoded. Exit code `-1` indicates a tunnel-level er
 - **No commits on main branch**: all work should be committed to a feature branch, merges to main happen via pull requests.
 - **No shell injection**: args are passed as an array to `exec`, never through a shell.
 - **Allowlisted env vars**: only specific `OP_*` vars are forwarded (see `protocol.AllowedEnvVars`).
-- **Socket permissions**: `0700` for the socket directory, `0600` for the socket file (owner-only).
+- **Socket paths**: `/opt/op-tunnel/<user>/` directories with `0700` permissions. Sockets are `0600`.
 - **Trust model**: equivalent to SSH agent forwarding — whoever can write to the socket can execute `op` as you.
-- **Tilde expansion**: `op-tunnel-client` expands `~/` in `LC_OP_TUNNEL_SOCK` because sshd may not.
 
 ## Build and test
 
 ```bash
-make build              # builds bin/op-tunnel-server and bin/op-tunnel-client
+make build              # builds bin/op-tunnel-server, bin/op-tunnel-client, and bin/op-tunnel-doctor
 make test               # runs unit tests
 make test-integration   # runs integration tests (require no external deps)
-make install-ssh-config # copies packaging/ssh.config to ~/.local/share/op-tunnel/ssh.config
 bash test/e2e.sh        # end-to-end test (requires Docker + op-tunnel-server running locally)
 ```
 
