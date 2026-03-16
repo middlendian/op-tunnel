@@ -19,6 +19,7 @@ trap cleanup EXIT
 echo "==> Building binaries..."
 go build -o "$TMPDIR_E2E/op-tunnel-server" "$REPO_ROOT/cmd/op-tunnel-server"
 GOOS=linux GOARCH=amd64 go build -o "$TMPDIR_E2E/op-tunnel-client" "$REPO_ROOT/cmd/op-tunnel-client"
+GOOS=linux GOARCH=amd64 go build -o "$TMPDIR_E2E/op-tunnel-doctor" "$REPO_ROOT/cmd/op-tunnel-doctor"
 
 # --- 2. Build Docker image ---
 echo "==> Building Docker image..."
@@ -33,6 +34,7 @@ ssh-keygen -t ed25519 -f "$TMPDIR_E2E/id_ed25519" -N "" -q
 # --- 4. Write temp SSH config ---
 # Written before docker run so the retry loop below can reference $SSH_CONFIG
 SSH_CONFIG="$TMPDIR_E2E/ssh_config"
+TEST_TUNNEL_ID="e2e_test_00000000000000000000"
 cat > "$SSH_CONFIG" <<EOF
 Host op-tunnel-test
     HostName 127.0.0.1
@@ -41,7 +43,10 @@ Host op-tunnel-test
     IdentityFile $TMPDIR_E2E/id_ed25519
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
-    Include $REPO_ROOT/packaging/ssh.config
+    RemoteForward /opt/op-tunnel/root/client/${TEST_TUNNEL_ID}.sock /opt/op-tunnel/$USER/server/op.sock
+    SetEnv LC_OP_TUNNEL_ID=${TEST_TUNNEL_ID}
+    StreamLocalBindUnlink yes
+    ServerAliveInterval 30
 EOF
 
 # --- 5. Start container ---
@@ -61,8 +66,12 @@ for i in $(seq 1 20); do
 done
 echo ""
 
+echo "==> Creating socket directories in container..."
+ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
+    'mkdir -p /opt/op-tunnel/root/client /opt/op-tunnel/root/server && chmod 700 /opt/op-tunnel/root'
+
 # --- 6. Check op-tunnel-server ---
-SERVER_SOCK="$HOME/.local/share/op-tunnel/server/op-tunnel.sock"
+SERVER_SOCK="/opt/op-tunnel/$USER/server/op.sock"
 if [ ! -S "$SERVER_SOCK" ]; then
     echo ""
     echo "ERROR: op-tunnel-server is not running (no socket at $SERVER_SOCK)."
@@ -85,24 +94,18 @@ ssh -F "$SSH_CONFIG" -v -o BatchMode=yes op-tunnel-test true 2>&1 \
 
 echo "==> Checking tunnel forwarding..."
 PREFLIGHT=$(ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
-    'SOCK=$(echo "${LC_OP_TUNNEL_SOCK:-}" | sed "s|^~/|$HOME/|")
-    echo "DEBUG: HOME=$HOME"
-    echo "DEBUG: LC_OP_TUNNEL_SOCK=${LC_OP_TUNNEL_SOCK:-<unset>}"
-    echo "DEBUG: expanded SOCK=$SOCK"
-    SOCKDIR=$(dirname "$SOCK")
-    echo "DEBUG: ~/.local/share tree: $(find "$HOME/.local/share" 2>&1 | sort)"
-    if [ -d "$SOCKDIR" ]; then
-        echo "DEBUG: socket dir exists: $SOCKDIR"
-        echo "DEBUG: dir contents: $(ls -la "$SOCKDIR" 2>&1)"
+    'echo "DEBUG: HOME=$HOME"
+    echo "DEBUG: LC_OP_TUNNEL_ID=${LC_OP_TUNNEL_ID:-<unset>}"
+    if [ -z "${LC_OP_TUNNEL_ID:-}" ]; then
+        echo "FAIL: LC_OP_TUNNEL_ID is not set (check AcceptEnv in sshd_config)"
     else
-        echo "DEBUG: socket dir missing: $SOCKDIR"
-    fi
-    if [ -z "${LC_OP_TUNNEL_SOCK:-}" ]; then
-        echo "FAIL: LC_OP_TUNNEL_SOCK is not set (check AcceptEnv in sshd_config)"
-    elif ! test -S "$SOCK"; then
-        echo "FAIL: socket not found at $SOCK (is op-tunnel-server running?)"
-    else
-        echo "PASS: socket at $SOCK"
+        SOCK="/opt/op-tunnel/$USER/client/${LC_OP_TUNNEL_ID}.sock"
+        echo "DEBUG: expected socket: $SOCK"
+        if ! test -S "$SOCK"; then
+            echo "FAIL: socket not found at $SOCK (is op-tunnel-server running?)"
+        else
+            echo "PASS: socket at $SOCK"
+        fi
     fi')
 echo "$PREFLIGHT" | sed 's/^/    /'
 if echo "$PREFLIGHT" | grep -q "^FAIL"; then
