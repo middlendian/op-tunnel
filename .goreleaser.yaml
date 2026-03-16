@@ -36,16 +36,31 @@ builds:
       - amd64
       - arm64
 
+  - id: op-tunnel-doctor
+    main: ./cmd/op-tunnel-doctor
+    binary: op-tunnel-doctor
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
 archives:
   - id: op-tunnel
     ids:
       - op-tunnel-server
       - op-tunnel-client
+      - op-tunnel-doctor
     name_template: "op-tunnel-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     files:
       - src: LICENSE
-      - src: packaging/ssh.config
+      - src: packaging/ssh.config.tmpl
         dst: dist
         strip_parent: true
       - src: packaging/op-tunnel-sshd.conf
@@ -81,16 +96,19 @@ brews:
     install: |
       bin.install "op-tunnel-server"
       bin.install "op-tunnel-client"
-      (share/"op-tunnel").install "dist/op-tunnel-sshd.conf", "dist/ssh.config"
+      bin.install "op-tunnel-doctor"
+      (share/"op-tunnel").install "dist/op-tunnel-sshd.conf", "dist/ssh.config.tmpl"
       bin.install "dist/op-tunnel-setup"
+    post_install: |
+      system bin/"op-tunnel-setup"
     caveats: |
-      1Password CLI is required but must be installed separately:
-        brew install --cask 1password-cli
+      op-tunnel-setup has been run automatically.
 
-      Run op-tunnel-setup to complete configuration:
+      If you need to reconfigure, run:
         op-tunnel-setup
 
       See https://github.com/middlendian/op-tunnel for full instructions.
     test: |
       assert_predicate bin/"op-tunnel-server", :executable?
       assert_predicate bin/"op-tunnel-client", :executable?
+      assert_predicate bin/"op-tunnel-doctor", :executable?
