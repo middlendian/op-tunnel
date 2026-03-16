@@ -24,7 +24,7 @@ On your **local machine** (the one hosting the 1Password desktop app):
 
     ```
     Host my-server
-        Include ~/.local/share/op-tunnel/ssh.config
+        Include ~/.config/op-tunnel/ssh.config
     ```
 
 > [!CAUTION]
@@ -46,21 +46,20 @@ Remote Host                                 Local Host
 │  op-tunnel-client         │  forward      │  op-tunnel-server         │
 │  (installed as `op`)      ├──────────────►│       │                   │
 │                           │               │       ▼                   │
-│  LC_OP_TUNNEL_SOCK set?   │◄──────────────│  exec real `op`           │
+│  LC_OP_TUNNEL_ID set?     │◄──────────────│  exec real `op`           │
 │  yes → tunnel             │  stdout /     │  return results           │
 │  no  → real `op`          │  stderr / rc  │                           │
 └───────────────────────────┘               └───────────────────────────┘
 ```
 
 `op-tunnel-server` listens on a Unix socket on your local machine. An SSH `RemoteForward` directive maps that socket to
-the remote machine, where `op-tunnel-client` is symlinked as `~/.local/bin/op` to serve as a wrapper. When the remote
-socket is active, it sends the command over the socket; the server executes `op` locally and returns stdout, stderr, and
-exit code. When the remote socket is inactive, `op-tunnel-client` is a passthrough for the local `op` binary.
+the remote machine, where `op-tunnel-client` is symlinked as `~/.local/bin/op` to serve as a wrapper. When `LC_OP_TUNNEL_ID` is set (inside an SSH session), it sends the command over the socket; the server executes `op` locally and returns stdout, stderr, and
+exit code. When `LC_OP_TUNNEL_ID` is not set, `op-tunnel-client` is a passthrough for the local `op` binary.
 
 ### Security model
 
 The trust model is equivalent to SSH agent forwarding between two trusted hosts. Only allowlisted `OP_*` environment
-variables are forwarded. The socket is owner-only (`0600`) and unique per remote user. Access to 1Password items is
+variables are forwarded. The socket is owner-only (`0600`) and lives in a per-user directory under `/opt/op-tunnel/<user>/`. Access to 1Password items is
 governed by the same local security settings as the `op` CLI itself.
 
 ### Supported `op` CLI features
@@ -93,6 +92,16 @@ op item get GitHub --fields password # Depending on your 1Password settings, re-
 
 Local `op` usage is completely unaffected. When the remote socket is inactive (i.e., outside an SSH session), the
 `op-tunnel-client` passes through to the real `op` binary locally.
+
+## Diagnostics
+
+If something isn't working, run:
+
+```bash
+op-tunnel-doctor
+```
+
+It checks the server, tunnel connection, symlink, PATH, SSH config, sshd config, directory permissions, and config files. Each failing check shows a recommended fix.
 
 ## License
 
