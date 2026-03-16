@@ -35,9 +35,17 @@ func isTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func pass(msg string)            { fmt.Printf("%s✓%s %s\n", green, reset, msg) }
-func fail(msg, fix string)       { fmt.Printf("%s✗%s %s\n  → %s%s%s\n", red, reset, msg, yellow, fix, reset) }
-func warn(msg, fix string)       { fmt.Printf("%s!%s %s\n  → %s%s%s\n", yellow, reset, msg, yellow, fix, reset) }
+func pass(msg string) {
+	fmt.Printf("%s✓%s %s\n", green, reset, msg)
+}
+
+func fail(msg, fix string) {
+	fmt.Printf("%s✗%s %s\n  → %s%s%s\n", red, reset, msg, yellow, fix, reset)
+}
+
+func warn(msg, fix string) {
+	fmt.Printf("%s!%s %s\n  → %s%s%s\n", yellow, reset, msg, yellow, fix, reset)
+}
 
 func main() {
 	fmt.Printf("\n%sop-tunnel doctor%s\n\n", bold, reset)
@@ -48,7 +56,7 @@ func main() {
 	// 1. Server socket
 	serverSock := oppath.ServerSocketPath(user)
 	if conn, err := net.DialTimeout("unix", serverSock, 100*time.Millisecond); err == nil {
-		conn.Close()
+		_ = conn.Close()
 		pass("Server is running")
 	} else {
 		fail("Server is not running", "brew services restart op-tunnel")
@@ -60,7 +68,7 @@ func main() {
 	if tunnelID != "" {
 		clientSock := oppath.ClientSocketPath(user, tunnelID)
 		if conn, err := net.DialTimeout("unix", clientSock, 100*time.Millisecond); err == nil {
-			conn.Close()
+			_ = conn.Close()
 			pass("Client tunnel is active")
 		} else {
 			fail("Client tunnel is not connected", "Reconnect your SSH session")
