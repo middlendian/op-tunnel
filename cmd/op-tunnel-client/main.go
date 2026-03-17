@@ -95,12 +95,7 @@ func tunnelMode(conn net.Conn, args []string) {
 }
 
 func passthroughMode(args []string) {
-	self, err := os.Executable()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "op-tunnel: cannot determine own path")
-		os.Exit(1)
-	}
-	realOp := oppath.FindRealOp(self, os.Getenv("PATH"))
+	realOp := oppath.FindRealOp(os.Getenv("PATH"))
 	if realOp == "" {
 		fmt.Fprintln(os.Stderr, "op-tunnel: op not found (install 1Password CLI or connect a tunnel)")
 		os.Exit(1)

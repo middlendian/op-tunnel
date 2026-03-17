@@ -41,51 +41,82 @@ func TestConfigDir_XDG(t *testing.T) {
 	}
 }
 
-func TestFindRealOp_SkipsSelf(t *testing.T) {
+func TestFindRealOp_SkipsClientSymlink(t *testing.T) {
+	// ~/.local/bin/op -> op-tunnel-client should be skipped;
+	// the real op binary (named "op") in another dir should be returned.
 	tmpDir := t.TempDir()
-	selfDir := filepath.Join(tmpDir, "self")
+	clientDir := filepath.Join(tmpDir, "client")
 	aliasDir := filepath.Join(tmpDir, "alias")
 	realDir := filepath.Join(tmpDir, "real")
-	if err := os.MkdirAll(selfDir, 0755); err != nil {
+	for _, d := range []string{clientDir, aliasDir, realDir} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// op-tunnel-client binary
+	clientBin := filepath.Join(clientDir, "op-tunnel-client")
+	if err := os.WriteFile(clientBin, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(aliasDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(realDir, 0755); err != nil {
+	// alias: op -> op-tunnel-client (like ~/.local/bin/op)
+	if err := os.Symlink(clientBin, filepath.Join(aliasDir, "op")); err != nil {
 		t.Fatal(err)
 	}
 
-	selfBin := filepath.Join(selfDir, "op")
-	if err := os.WriteFile(selfBin, []byte("#!/bin/sh\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.Symlink(selfBin, filepath.Join(aliasDir, "op")); err != nil {
-		t.Fatal(err)
-	}
-
+	// real op binary named "op"
 	realBin := filepath.Join(realDir, "op")
 	if err := os.WriteFile(realBin, []byte("#!/bin/sh\necho real\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	path := aliasDir + string(os.PathListSeparator) + realDir
-
-	got := FindRealOp(selfBin, path)
+	got := FindRealOp(path)
 	if got != realBin {
 		t.Errorf("FindRealOp = %q, want %q", got, realBin)
 	}
 }
 
-func TestFindRealOp_NoneFound(t *testing.T) {
+func TestFindRealOp_SkipsClientSymlinkAsHombrew(t *testing.T) {
+	// Homebrew cask op: /opt/homebrew/bin/op -> Caskroom/.../op (named "op", not "op-tunnel-client")
+	// Should NOT be skipped.
 	tmpDir := t.TempDir()
-	selfBin := filepath.Join(tmpDir, "op")
-	if err := os.WriteFile(selfBin, []byte("#!/bin/sh\n"), 0755); err != nil {
+	cellarDir := filepath.Join(tmpDir, "cellar")
+	brewBinDir := filepath.Join(tmpDir, "brewbin")
+	for _, d := range []string{cellarDir, brewBinDir} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The real binary inside Cellar, named "op"
+	cellarBin := filepath.Join(cellarDir, "op")
+	if err := os.WriteFile(cellarBin, []byte("#!/bin/sh\necho op\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Homebrew bin symlink: op -> Cellar/op
+	if err := os.Symlink(cellarBin, filepath.Join(brewBinDir, "op")); err != nil {
 		t.Fatal(err)
 	}
 
-	got := FindRealOp(selfBin, tmpDir)
+	got := FindRealOp(brewBinDir)
+	if got != filepath.Join(brewBinDir, "op") {
+		t.Errorf("FindRealOp = %q, want %q", got, filepath.Join(brewBinDir, "op"))
+	}
+}
+
+func TestFindRealOp_NoneFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Only an op-tunnel-client symlink, no real op
+	clientBin := filepath.Join(tmpDir, "op-tunnel-client")
+	if err := os.WriteFile(clientBin, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(clientBin, filepath.Join(tmpDir, "op")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := FindRealOp(tmpDir)
 	if got != "" {
 		t.Errorf("FindRealOp = %q, want empty string", got)
 	}
@@ -93,25 +124,11 @@ func TestFindRealOp_NoneFound(t *testing.T) {
 
 func TestFindRealOp_SkipsNonExecutable(t *testing.T) {
 	tmpDir := t.TempDir()
-	selfDir := filepath.Join(tmpDir, "self")
-	otherDir := filepath.Join(tmpDir, "other")
-	if err := os.MkdirAll(selfDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(otherDir, 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "op"), []byte("data"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	selfBin := filepath.Join(selfDir, "op")
-	if err := os.WriteFile(selfBin, []byte("#!/bin/sh\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.WriteFile(filepath.Join(otherDir, "op"), []byte("data"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	got := FindRealOp(selfBin, otherDir)
+	got := FindRealOp(tmpDir)
 	if got != "" {
 		t.Errorf("FindRealOp = %q, want empty string", got)
 	}

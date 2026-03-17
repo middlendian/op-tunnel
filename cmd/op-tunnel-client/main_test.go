@@ -59,24 +59,20 @@ func TestFindRealOp_ClientIntegration(t *testing.T) {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
-	selfDir := filepath.Join(tmpDir, "self")
+	clientDir := filepath.Join(tmpDir, "client")
 	aliasDir := filepath.Join(tmpDir, "alias")
 	realDir := filepath.Join(tmpDir, "real")
-	if err := os.MkdirAll(selfDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(aliasDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(realDir, 0755); err != nil {
-		t.Fatal(err)
+	for _, d := range []string{clientDir, aliasDir, realDir} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	selfBin := filepath.Join(selfDir, "op")
-	if err := os.WriteFile(selfBin, []byte("#!/bin/sh\n"), 0755); err != nil {
+	clientBin := filepath.Join(clientDir, "op-tunnel-client")
+	if err := os.WriteFile(clientBin, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(selfBin, filepath.Join(aliasDir, "op")); err != nil {
+	if err := os.Symlink(clientBin, filepath.Join(aliasDir, "op")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +82,7 @@ func TestFindRealOp_ClientIntegration(t *testing.T) {
 	}
 
 	path := aliasDir + string(os.PathListSeparator) + realDir
-	got := oppath.FindRealOp(selfBin, path)
+	got := oppath.FindRealOp(path)
 	if got != realBin {
 		t.Errorf("FindRealOp = %q, want %q", got, realBin)
 	}

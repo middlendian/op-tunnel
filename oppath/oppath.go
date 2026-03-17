@@ -25,14 +25,10 @@ func ServerSocketPath(user string) string {
 }
 
 // FindRealOp searches PATH for the real `op` binary, skipping any candidate
-// that resolves to the same file as selfPath (via device+inode comparison).
-// This prevents infinite loops when op-tunnel-client is symlinked as `op`.
-func FindRealOp(selfPath, pathEnv string) string {
-	selfInfo, err := os.Stat(selfPath)
-	if err != nil {
-		return ""
-	}
-
+// that resolves (via symlink) to a file named "op-tunnel-client".
+// This handles the case where op-tunnel-client is symlinked as `op` (including
+// Homebrew cask installs of the real op, which are also symlinks).
+func FindRealOp(pathEnv string) string {
 	for _, dir := range filepath.SplitList(pathEnv) {
 		if dir == "" {
 			continue
@@ -42,7 +38,11 @@ func FindRealOp(selfPath, pathEnv string) string {
 		if err != nil || info.IsDir() || info.Mode()&0111 == 0 {
 			continue
 		}
-		if os.SameFile(selfInfo, info) {
+		resolved, err := filepath.EvalSymlinks(candidate)
+		if err != nil {
+			continue
+		}
+		if filepath.Base(resolved) == "op-tunnel-client" {
 			continue
 		}
 		return candidate

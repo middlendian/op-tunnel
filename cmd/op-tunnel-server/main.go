@@ -106,11 +106,7 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	}
 
 	// Find op binary
-	self, err := os.Executable()
-	if err != nil {
-		log.Printf("cannot determine own executable path: %v", err)
-	}
-	opPath := oppath.FindRealOp(self, os.Getenv("PATH"))
+	opPath := oppath.FindRealOp(os.Getenv("PATH"))
 	if opPath == "" {
 		resp := protocol.ErrorResponse("op binary not found in PATH")
 		if err := protocol.SendResponse(conn, resp); err != nil {
