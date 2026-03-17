@@ -79,11 +79,14 @@ func main() {
 	}
 
 	// 3. Real op binary
-	self, err := os.Executable()
+	// FindRealOp must skip op-tunnel-client (the op wrapper), not the doctor itself.
+	// Use exec.LookPath to find op-tunnel-client's path; fall back to the doctor's
+	// own path if op-tunnel-client isn't found (catches fewer aliases, but safe).
+	clientBin, err := exec.LookPath("op-tunnel-client")
 	if err != nil {
-		warn("Cannot determine own executable path", fmt.Sprintf("%v", err))
+		clientBin, _ = os.Executable()
 	}
-	realOp := oppath.FindRealOp(self, os.Getenv("PATH"))
+	realOp := oppath.FindRealOp(clientBin, os.Getenv("PATH"))
 	if realOp != "" {
 		pass(fmt.Sprintf("Real op binary: %s", realOp))
 	} else {
