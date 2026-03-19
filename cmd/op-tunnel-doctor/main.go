@@ -139,12 +139,17 @@ func main() {
 		failures++
 	}
 
-	// 7. sshd drop-in
-	sshdConf := "/etc/ssh/sshd_config.d/op-tunnel.conf"
-	if _, err := os.Stat(sshdConf); err == nil {
-		pass("sshd drop-in installed")
+	// 7. ~/.ssh/rc configured
+	sshRC := filepath.Join(os.Getenv("HOME"), ".ssh", "rc")
+	if data, err := os.ReadFile(sshRC); err == nil {
+		if strings.Contains(string(data), "op-tunnel-keepalive") {
+			pass("~/.ssh/rc configured for op-tunnel")
+		} else {
+			fail("~/.ssh/rc missing op-tunnel-keepalive", "brew reinstall op-tunnel")
+			failures++
+		}
 	} else {
-		fail("sshd drop-in missing", "brew reinstall op-tunnel")
+		fail("~/.ssh/rc not found", "brew reinstall op-tunnel")
 		failures++
 	}
 
