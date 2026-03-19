@@ -15,21 +15,32 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/middlendian/op-tunnel/oppath"
 	"github.com/middlendian/op-tunnel/protocol"
 )
 
 const defaultTimeout = 5 * time.Minute
 
 func main() {
-	socketPath, err := protocol.ExpandSocketPath(protocol.ServerSocketDir)
-	if err != nil {
-		log.Fatalf("resolving socket path: %v", err)
+	user := os.Getenv("USER")
+	if user == "" {
+		log.Fatal("USER environment variable not set")
 	}
+	socketPath := oppath.ServerSocketPath(user)
 
 	// Create socket directory with restrictive permissions
 	socketDir := filepath.Dir(socketPath)
-	if err := os.MkdirAll(socketDir, 0700); err != nil {
+	oldUmask := syscall.Umask(0077)
+	err := os.MkdirAll(socketDir, 0700)
+	syscall.Umask(oldUmask)
+	if err != nil {
 		log.Fatalf("creating socket directory: %v", err)
+	}
+
+	// Verify ownership of the user-specific socket directory
+	userDir := oppath.UserDir(user)
+	if err := oppath.VerifyDirOwnership(userDir); err != nil {
+		log.Fatalf("socket directory security check failed: %v", err)
 	}
 
 	// Remove stale socket
@@ -104,8 +115,8 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 	}
 
 	// Find op binary
-	opPath, err := exec.LookPath("op")
-	if err != nil {
+	opPath := oppath.FindRealOp(os.Getenv("PATH"))
+	if opPath == "" {
 		resp := protocol.ErrorResponse("op binary not found in PATH")
 		if err := protocol.SendResponse(conn, resp); err != nil {
 			log.Printf("sending error response: %v", err)

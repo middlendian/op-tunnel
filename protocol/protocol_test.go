@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -54,19 +53,6 @@ func TestWriteReadEmptyPayload(t *testing.T) {
 
 	if len(got) != 0 {
 		t.Fatalf("expected empty payload, got %d bytes", len(got))
-	}
-}
-
-func TestExpandSocketPath(t *testing.T) {
-	path, err := ExpandSocketPath(ServerSocketDir)
-	if err != nil {
-		t.Fatalf("ExpandSocketPath: %v", err)
-	}
-
-	home, _ := os.UserHomeDir()
-	expected := filepath.Join(home, ServerSocketDir, SocketName)
-	if path != expected {
-		t.Fatalf("got %q, want %q", path, expected)
 	}
 }
 

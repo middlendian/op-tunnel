@@ -1,9 +1,24 @@
 #!/bin/sh
 set -e
 
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+# Colors (only when stdout is a terminal)
+if [ -t 1 ]; then
+    BOLD='\033[1m'
+    YELLOW='\033[1;33m'
+    GREEN='\033[1;32m'
+    RED='\033[1;31m'
+    RESET='\033[0m'
+else
+    BOLD='' YELLOW='' GREEN='' RED='' RESET=''
+fi
+
+info()  { printf "${GREEN}✓${RESET} %s\n" "$1"; }
+warn()  { printf "${YELLOW}!${RESET} %s\n" "$1"; }
+fail()  { printf "${RED}✗${RESET} %s\n" "$1"; exit 1; }
+
 # Locate a file shipped alongside this script.
-# Tries Homebrew layout first (script in bin/, file in share/op-tunnel/),
-# then tarball layout (script and file are siblings inside dist/).
 find_dist_file() {
     name="$1"
     brew_path="$(dirname "$0")/../share/op-tunnel/$name"
@@ -13,170 +28,112 @@ find_dist_file() {
     elif [ -f "$tarball_path" ]; then
         echo "$tarball_path"
     else
-        echo "Error: cannot find $name (looked in share/op-tunnel/ and next to this script)" >&2
-        exit 1
+        fail "Cannot find $name (looked in share/op-tunnel/ and next to this script)"
     fi
 }
 
+# Verify directory ownership (defense against /tmp squatting)
+verify_ownership() {
+    dir="$1"
+    if [ ! -d "$dir" ]; then
+        return 0
+    fi
+    owner_uid="$(stat -c '%u' "$dir" 2>/dev/null || stat -f '%u' "$dir" 2>/dev/null)"
+    my_uid="$(id -u)"
+    if [ "$owner_uid" != "$my_uid" ]; then
+        fail "$dir is owned by uid $owner_uid, expected $my_uid (possible squatting attack)"
+    fi
+}
+
+# ─── Configuration ───────────────────────────────────────────────────────────
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/op-tunnel"
+TUNNEL_ID_FILE="$CONFIG_DIR/tunnel-id"
+SSH_CONFIG_FILE="$CONFIG_DIR/ssh.config"
+
 echo ""
-echo "=== op-tunnel setup ==="
+echo "${BOLD}=== op-tunnel setup ===${RESET}"
 echo ""
 
-# ─── Step 1: Configure sshd ───────────────────────────────────────────────────
-echo "=== Step 1: Configure sshd ==="
-echo ""
-echo "Why: SSH servers must allow clients to pass LC_OP_TUNNEL_SOCK."
-echo "     This environment variable tells op-tunnel-client where to find"
-echo "     the forwarded Unix socket."
-echo ""
+# ─── Step 1: Generate tunnel ID ──────────────────────────────────────────────
 
-CONF_SRC="$(find_dist_file op-tunnel-sshd.conf)"
-CONF_DST="/etc/ssh/sshd_config.d/op-tunnel.conf"
+mkdir -p "$CONFIG_DIR"
 
-echo "Action: sudo install -m 644 $CONF_SRC $CONF_DST"
-sudo install -m 644 "$CONF_SRC" "$CONF_DST"
-echo "Written: $CONF_DST"
-
-echo "Action: reload sshd"
-if command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl reload sshd 2>/dev/null || sudo systemctl reload ssh
-    echo "sshd reloaded via systemctl."
-elif sudo launchctl kickstart -k system/com.openssh.sshd >/dev/null 2>&1; then
-    echo "sshd reloaded via launchctl."
+if [ -f "$TUNNEL_ID_FILE" ]; then
+    TUNNEL_ID="$(cat "$TUNNEL_ID_FILE")"
+    info "Tunnel ID: $TUNNEL_ID (existing)"
 else
-    echo "Note: could not reload sshd automatically. Please reload it manually."
+    TUNNEL_ID="$(head -c 16 /dev/urandom | xxd -p -c 32)"
+    printf '%s' "$TUNNEL_ID" > "$TUNNEL_ID_FILE"
+    info "Tunnel ID: $TUNNEL_ID (generated)"
 fi
 
-echo ""
-echo "Step 1 complete."
-echo ""
+# ─── Step 2: Generate ssh.config ─────────────────────────────────────────────
 
-# ─── Step 2: Configure SSH client ─────────────────────────────────────────────
-echo "=== Step 2: Configure SSH client ==="
-echo ""
-echo "Why: When you SSH to a remote host, your SSH client needs to forward"
-echo "     the op-tunnel socket and set LC_OP_TUNNEL_SOCK in the remote session."
-echo ""
+TEMPLATE="$(find_dist_file ssh.config.tmpl)"
 
-printf "Which hosts should use op-tunnel? [default: *.local]: "
-read -r HOST_PATTERN
-if [ -z "$HOST_PATTERN" ]; then
-    HOST_PATTERN="*.local"
-fi
+sed -e "s/@@TUNNEL_ID@@/$TUNNEL_ID/g" \
+    -e "s/@@LOCAL_USER@@/$USER/g" \
+    "$TEMPLATE" > "$SSH_CONFIG_FILE"
+info "Generated: $SSH_CONFIG_FILE"
 
-OP_TUNNEL_DIR="$HOME/.local/share/op-tunnel"
-SSH_CONFIG="$HOME/.ssh/config"
-INCLUDE_LINE="Include ~/.local/share/op-tunnel/ssh.config"
-
-echo "Action: create socket directories"
-mkdir -p "$OP_TUNNEL_DIR/server" "$OP_TUNNEL_DIR/client"
-echo "Created: $OP_TUNNEL_DIR/{server,client}"
-
-echo "Action: copy ssh.config"
-SSH_TEMPLATE="$(find_dist_file ssh.config)"
-cp "$SSH_TEMPLATE" "$OP_TUNNEL_DIR/ssh.config"
-echo "Copied ssh.config to $OP_TUNNEL_DIR/ssh.config"
-
-mkdir -p "$HOME/.ssh"
-touch "$SSH_CONFIG"
-
-if grep -qF "$INCLUDE_LINE" "$SSH_CONFIG" 2>/dev/null; then
-    echo "~/.ssh/config already contains the op-tunnel Include. Skipping."
-else
-    printf "\nHost %s\n    %s\n" "$HOST_PATTERN" "$INCLUDE_LINE" >> "$SSH_CONFIG"
-    echo "Added to ~/.ssh/config:"
-    echo "  Host $HOST_PATTERN"
-    echo "      $INCLUDE_LINE"
-fi
-
-echo ""
-echo "Step 2 complete."
-echo ""
-
-# ─── Step 3: Shadow op with a symlink ─────────────────────────────────────────
-echo "=== Step 3: Shadow 'op' with a symlink ==="
-echo ""
-echo "Why: op-tunnel-client proxies op commands over the tunnel when available,"
-echo "     falling back to the real op binary. A symlink (unlike a shell alias)"
-echo "     works reliably from scripts, Makefiles, IDEs, and other tools."
-echo ""
+# ─── Step 3: Create op symlink ───────────────────────────────────────────────
 
 CLIENT_BIN="$(command -v op-tunnel-client 2>/dev/null || true)"
 if [ -z "$CLIENT_BIN" ]; then
-    echo "Warning: op-tunnel-client not found in PATH. Skipping."
-    echo "Re-run this step after op-tunnel-client is installed."
+    warn "op-tunnel-client not found in PATH. Skipping symlink."
 else
     mkdir -p "$HOME/.local/bin"
     ln -sf "$CLIENT_BIN" "$HOME/.local/bin/op"
-    echo "Created: ~/.local/bin/op -> $CLIENT_BIN"
-
-    # Detect shell and rc file
-    case "$SHELL" in
-        */zsh)  RC_FILE="$HOME/.zshrc" ;;
-        */bash) RC_FILE="$HOME/.bashrc" ;;
-        */fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
-        *)      RC_FILE="$HOME/.profile" ;;
-    esac
-
-    SHELL_NAME="$(basename "$SHELL")"
-
-    if [ "$SHELL_NAME" = "fish" ]; then
-        FISH_LINE="fish_add_path $HOME/.local/bin"
-        if grep -qF ".local/bin" "$RC_FILE" 2>/dev/null; then
-            echo "$RC_FILE already adds ~/.local/bin to PATH. Skipping."
-        else
-            mkdir -p "$(dirname "$RC_FILE")"
-            echo "$FISH_LINE" >> "$RC_FILE"
-            echo "Added to $RC_FILE: $FISH_LINE"
-        fi
-    else
-        PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
-        if grep -qF ".local/bin" "$RC_FILE" 2>/dev/null; then
-            echo "$RC_FILE already adds ~/.local/bin to PATH. Skipping."
-        else
-            echo "$PATH_LINE" >> "$RC_FILE"
-            echo "Added to $RC_FILE: $PATH_LINE"
-        fi
-    fi
-
-    echo ""
-    echo "Note: PATH changes take effect in new shell sessions."
-    echo "To apply now: source $RC_FILE"
+    info "Symlink: ~/.local/bin/op -> $CLIENT_BIN"
 fi
 
+# ─── Step 4: Create socket directory ─────────────────────────────────────────
+
+SOCKET_DIR="/tmp/op-tunnel-$USER"
+old_umask=$(umask)
+umask 077
+mkdir -p "$SOCKET_DIR/server" "$SOCKET_DIR/client"
+umask "$old_umask"
+verify_ownership "$SOCKET_DIR"
+info "Socket directory: $SOCKET_DIR/ (owner-only)"
+
+# ─── Step 5: Configure ~/.ssh/rc ─────────────────────────────────────────────
+
+if ! grep -q 'op-tunnel-keepalive' "$HOME/.ssh/rc" 2>/dev/null; then
+    mkdir -p "$HOME/.ssh"
+    printf '\n# op-tunnel keepalive\n[ -n "$LC_OP_TUNNEL_ID" ] && op-tunnel-keepalive --session-pid "$PPID" --tunnel-id "$LC_OP_TUNNEL_ID"\n' >> "$HOME/.ssh/rc"
+    info "Configured: ~/.ssh/rc"
+else
+    info "~/.ssh/rc already configured"
+fi
+
+# ─── Caveats ──────────────────────────────────────────────────────────────────
+
 echo ""
-echo "Step 3 complete."
+echo "${BOLD}=== Next steps ===${RESET}"
 echo ""
 
-# ─── Step 4: Create client socket symlink ─────────────────────────────────────
-echo "=== Step 4: Create client socket symlink ==="
+printf "${YELLOW}!${RESET} ${BOLD}SSH config:${RESET} Add this to ${BOLD}~/.ssh/config${RESET} for each remote host:\n"
 echo ""
-echo "Why: The SSH RemoteForward creates the socket at /tmp/op-tunnel.\$USER.sock."
-echo "     A stable symlink at ~/.local/share/op-tunnel/client/op-tunnel.sock"
-echo "     lets LC_OP_TUNNEL_SOCK use a fixed path that survives reboots."
-echo "     The symlink is dangling when no SSH session is active — that is expected."
+echo "    Host my-server"
+echo "        Include ~/.config/op-tunnel/ssh.config"
 echo ""
 
-SYMLINK_DIR="$HOME/.local/share/op-tunnel/client"
-SYMLINK_TARGET="/tmp/op-tunnel.$USER.sock"
-SYMLINK_PATH="$SYMLINK_DIR/op-tunnel.sock"
+# Check if ~/.local/bin is in PATH
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*)
+        ;;
+    *)
+        printf "${YELLOW}!${RESET} ${BOLD}PATH:${RESET} ~/.local/bin is not in your PATH. Add it:\n"
+        case "$SHELL" in
+            */zsh)  echo "    echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc" ;;
+            */fish) echo "    echo 'fish_add_path \$HOME/.local/bin' >> ~/.config/fish/config.fish" ;;
+            *)      echo "    echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc" ;;
+        esac
+        echo ""
+        ;;
+esac
 
-echo "Action: mkdir -p $SYMLINK_DIR"
-mkdir -p "$SYMLINK_DIR"
-echo "Action: ln -sf $SYMLINK_TARGET $SYMLINK_PATH"
-ln -sf "$SYMLINK_TARGET" "$SYMLINK_PATH"
-echo "Created: $SYMLINK_PATH -> $SYMLINK_TARGET"
-
-echo ""
-echo "Step 4 complete."
-echo ""
-
-echo "=== Setup complete ==="
-echo ""
-echo "Next steps:"
-echo "  - Start the server:  brew services start op-tunnel"
-echo "  - Test the tunnel:   ssh <remote-host> op --version"
-echo ""
-echo "Upgrading from an earlier version? Re-run op-tunnel-setup on each remote"
-echo "host to create the client socket symlink (Step 4)."
+echo "${GREEN}Setup complete. No sudo required.${RESET}"
 echo ""

@@ -6,16 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 )
 
 const (
 	ProtocolVersion = 1
 	MaxPayloadSize  = 64 << 20 // 64MB
-	SocketName      = "op-tunnel.sock"
-	EnvTunnelSock   = "LC_OP_TUNNEL_SOCK"
-	ServerSocketDir = ".local/share/op-tunnel/server"
-	ClientSocketDir = ".local/share/op-tunnel/client"
 )
 
 var AllowedEnvVars = []string{
@@ -125,16 +120,6 @@ func ReadResponse(r io.Reader) (*Response, error) {
 // ErrorResponse creates a tunnel-level error response.
 func ErrorResponse(msg string) *Response {
 	return &Response{V: ProtocolVersion, ExitCode: -1, Error: msg}
-}
-
-// ExpandSocketPath resolves a relative socket dir (e.g., ServerSocketDir) to
-// an absolute path like /Users/greg/.local/share/op-tunnel/server/op-tunnel.sock.
-func ExpandSocketPath(relDir string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, relDir, SocketName), nil
 }
 
 // FilterEnv returns a map of only the allowlisted 1Password env vars
