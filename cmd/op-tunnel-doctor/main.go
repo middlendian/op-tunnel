@@ -149,7 +149,7 @@ func main() {
 	}
 
 	// 8. Directory permissions
-	userDir := filepath.Join(oppath.BaseDir, user)
+	userDir := oppath.UserDir(user)
 	if info, err := os.Stat(userDir); err == nil {
 		if info.Mode().Perm() == 0700 {
 			pass(fmt.Sprintf("Directory permissions: %s (0700)", userDir))

@@ -6,9 +6,17 @@ import (
 	"testing"
 )
 
+func TestUserDir(t *testing.T) {
+	got := UserDir("alice")
+	want := "/tmp/op-tunnel-alice"
+	if got != want {
+		t.Errorf("UserDir = %q, want %q", got, want)
+	}
+}
+
 func TestClientSocketPath(t *testing.T) {
 	got := ClientSocketPath("alice", "abc123def456")
-	want := "/opt/op-tunnel/alice/client/abc123def456.sock"
+	want := "/tmp/op-tunnel-alice/client/abc123def456.sock"
 	if got != want {
 		t.Errorf("ClientSocketPath = %q, want %q", got, want)
 	}
@@ -16,9 +24,23 @@ func TestClientSocketPath(t *testing.T) {
 
 func TestServerSocketPath(t *testing.T) {
 	got := ServerSocketPath("bob")
-	want := "/opt/op-tunnel/bob/server/op.sock"
+	want := "/tmp/op-tunnel-bob/server/op.sock"
 	if got != want {
 		t.Errorf("ServerSocketPath = %q, want %q", got, want)
+	}
+}
+
+func TestVerifyDirOwnership_OwnedByCurrentUser(t *testing.T) {
+	dir := t.TempDir()
+	if err := VerifyDirOwnership(dir); err != nil {
+		t.Errorf("VerifyDirOwnership on own temp dir: %v", err)
+	}
+}
+
+func TestVerifyDirOwnership_NonexistentDir(t *testing.T) {
+	err := VerifyDirOwnership("/nonexistent/path/that/does/not/exist")
+	if err == nil {
+		t.Error("VerifyDirOwnership on nonexistent dir: expected error, got nil")
 	}
 }
 

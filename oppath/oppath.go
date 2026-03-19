@@ -1,27 +1,47 @@
 package oppath
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 const (
-	// BaseDir is the root directory for op-tunnel sockets.
-	BaseDir = "/opt/op-tunnel"
-
 	// EnvTunnelID is the environment variable set by SSH's SetEnv
 	// to identify the local machine's tunnel.
 	EnvTunnelID = "LC_OP_TUNNEL_ID"
 )
 
+// UserDir returns the per-user runtime directory for op-tunnel sockets.
+func UserDir(user string) string {
+	return "/tmp/op-tunnel-" + user
+}
+
+// VerifyDirOwnership checks that dir exists and is owned by the current user.
+func VerifyDirOwnership(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", dir, err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("unable to get ownership info for %s", dir)
+	}
+	if stat.Uid != uint32(os.Getuid()) {
+		return fmt.Errorf("%s is owned by uid %d, expected %d", dir, stat.Uid, os.Getuid())
+	}
+	return nil
+}
+
 // ClientSocketPath returns the path for a remote-forwarded client socket.
 func ClientSocketPath(user, tunnelID string) string {
-	return filepath.Join(BaseDir, user, "client", tunnelID+".sock")
+	return filepath.Join(UserDir(user), "client", tunnelID+".sock")
 }
 
 // ServerSocketPath returns the path for the local op-tunnel-server socket.
 func ServerSocketPath(user string) string {
-	return filepath.Join(BaseDir, user, "server", "op.sock")
+	return filepath.Join(UserDir(user), "server", "op.sock")
 }
 
 // FindRealOp searches PATH for the real `op` binary, skipping any candidate

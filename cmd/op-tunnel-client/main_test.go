@@ -14,7 +14,7 @@ func TestClientSocketPath(t *testing.T) {
 	t.Setenv("USER", "testuser")
 
 	got := oppath.ClientSocketPath(os.Getenv("USER"), os.Getenv(oppath.EnvTunnelID))
-	want := "/opt/op-tunnel/testuser/client/abcdef1234567890abcdef1234567890.sock"
+	want := "/tmp/op-tunnel-testuser/client/abcdef1234567890abcdef1234567890.sock"
 	if got != want {
 		t.Errorf("socket path = %q, want %q", got, want)
 	}
