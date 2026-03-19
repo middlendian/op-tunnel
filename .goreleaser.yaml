@@ -114,7 +114,7 @@ brews:
       bin.install "dist/op-tunnel-setup"
     caveats: |
       To complete setup, run:
-        op-tunnel-setup
+        op-tunnel-setup && op-tunnel-doctor
 
       See https://github.com/middlendian/op-tunnel for full instructions.
     test: |
