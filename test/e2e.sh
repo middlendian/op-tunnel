@@ -20,6 +20,7 @@ echo "==> Building binaries..."
 go build -o "$TMPDIR_E2E/op-tunnel-server" "$REPO_ROOT/cmd/op-tunnel-server"
 GOOS=linux GOARCH=amd64 go build -o "$TMPDIR_E2E/op-tunnel-client" "$REPO_ROOT/cmd/op-tunnel-client"
 GOOS=linux GOARCH=amd64 go build -o "$TMPDIR_E2E/op-tunnel-doctor" "$REPO_ROOT/cmd/op-tunnel-doctor"
+GOOS=linux GOARCH=amd64 go build -o "$TMPDIR_E2E/op-tunnel-keepalive" "$REPO_ROOT/cmd/op-tunnel-keepalive"
 
 # --- 2. Build Docker image ---
 echo "==> Building Docker image..."
@@ -43,7 +44,7 @@ Host op-tunnel-test
     IdentityFile $TMPDIR_E2E/id_ed25519
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
-    RemoteForward /opt/op-tunnel/root/client/${TEST_TUNNEL_ID}.sock /opt/op-tunnel/$USER/server/op.sock
+    RemoteForward /tmp/op-tunnel-root/client/${TEST_TUNNEL_ID}.sock /tmp/op-tunnel-$USER/server/op.sock
     SetEnv LC_OP_TUNNEL_ID=${TEST_TUNNEL_ID}
     StreamLocalBindUnlink yes
     ServerAliveInterval 30
@@ -68,10 +69,10 @@ echo ""
 
 echo "==> Creating socket directories in container..."
 ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
-    'mkdir -p /opt/op-tunnel/root/client /opt/op-tunnel/root/server && chmod 700 /opt/op-tunnel/root'
+    'mkdir -p /tmp/op-tunnel-root/client /tmp/op-tunnel-root/server && chmod 700 /tmp/op-tunnel-root'
 
 # --- 6. Check op-tunnel-server ---
-SERVER_SOCK="/opt/op-tunnel/$USER/server/op.sock"
+SERVER_SOCK="/tmp/op-tunnel-$USER/server/op.sock"
 if [ ! -S "$SERVER_SOCK" ]; then
     echo ""
     echo "ERROR: op-tunnel-server is not running (no socket at $SERVER_SOCK)."
@@ -99,7 +100,7 @@ PREFLIGHT=$(ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
     if [ -z "${LC_OP_TUNNEL_ID:-}" ]; then
         echo "FAIL: LC_OP_TUNNEL_ID is not set (check AcceptEnv in sshd_config)"
     else
-        SOCK="/opt/op-tunnel/$USER/client/${LC_OP_TUNNEL_ID}.sock"
+        SOCK="/tmp/op-tunnel-$USER/client/${LC_OP_TUNNEL_ID}.sock"
         echo "DEBUG: expected socket: $SOCK"
         if ! test -S "$SOCK"; then
             echo "FAIL: socket not found at $SOCK (is op-tunnel-server running?)"
