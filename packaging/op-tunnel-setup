@@ -32,6 +32,19 @@ find_dist_file() {
     fi
 }
 
+# Verify directory ownership (defense against /tmp squatting)
+verify_ownership() {
+    dir="$1"
+    if [ ! -d "$dir" ]; then
+        return 0
+    fi
+    owner_uid="$(stat -c '%u' "$dir" 2>/dev/null || stat -f '%u' "$dir" 2>/dev/null)"
+    my_uid="$(id -u)"
+    if [ "$owner_uid" != "$my_uid" ]; then
+        fail "$dir is owned by uid $owner_uid, expected $my_uid (possible squatting attack)"
+    fi
+}
+
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/op-tunnel"
@@ -75,40 +88,25 @@ else
     info "Symlink: ~/.local/bin/op -> $CLIENT_BIN"
 fi
 
-# ─── Step 4: Privileged setup (sudo) ─────────────────────────────────────────
+# ─── Step 4: Create socket directory ─────────────────────────────────────────
 
-echo ""
-echo "${BOLD}Administrator access required (one-time setup)${RESET}"
-echo "Creating private socket directory and configuring sshd."
-echo ""
+SOCKET_DIR="/tmp/op-tunnel-$USER"
+old_umask=$(umask)
+umask 077
+mkdir -p "$SOCKET_DIR/server" "$SOCKET_DIR/client"
+umask "$old_umask"
+verify_ownership "$SOCKET_DIR"
+info "Socket directory: $SOCKET_DIR/ (owner-only)"
 
-if ! sudo -v 2>/dev/null; then
-    fail "Setup cannot continue without administrator access. The socket directory and sshd configuration are required for op-tunnel to function."
-fi
+# ─── Step 5: Configure ~/.ssh/rc ─────────────────────────────────────────────
 
-sudo mkdir -p "/opt/op-tunnel/$USER"
-sudo chown "$USER" "/opt/op-tunnel/$USER"
-sudo chmod 700 "/opt/op-tunnel/$USER"
-info "Directory: /opt/op-tunnel/$USER/ (owner-only)"
-
-SSHD_CONF="$(find_dist_file op-tunnel-sshd.conf)"
-sudo install -m 644 "$SSHD_CONF" /etc/ssh/sshd_config.d/op-tunnel.conf
-info "sshd config: /etc/ssh/sshd_config.d/op-tunnel.conf"
-
-# Reload sshd
-if command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl reload sshd 2>/dev/null || sudo systemctl reload ssh 2>/dev/null || true
-    info "sshd reloaded (systemctl)"
-elif sudo launchctl kickstart -k system/com.openssh.sshd 2>/dev/null; then
-    info "sshd reloaded (launchctl)"
+if ! grep -q 'op-tunnel-keepalive' "$HOME/.ssh/rc" 2>/dev/null; then
+    mkdir -p "$HOME/.ssh"
+    printf '\n# op-tunnel keepalive\n[ -n "$LC_OP_TUNNEL_ID" ] && op-tunnel-keepalive --session-pid "$PPID" --tunnel-id "$LC_OP_TUNNEL_ID"\n' >> "$HOME/.ssh/rc"
+    info "Configured: ~/.ssh/rc"
 else
-    warn "Could not reload sshd automatically. Please reload it manually."
+    info "~/.ssh/rc already configured"
 fi
-
-# ─── Step 5: Create subdirectories (no sudo) ─────────────────────────────────
-
-mkdir -p "/opt/op-tunnel/$USER/client" "/opt/op-tunnel/$USER/server"
-info "Subdirectories: client/ server/"
 
 # ─── Caveats ──────────────────────────────────────────────────────────────────
 
@@ -124,7 +122,8 @@ echo ""
 
 # Check if ~/.local/bin is in PATH
 case ":$PATH:" in
-    *":$HOME/.local/bin:"*) ;;
+    *":$HOME/.local/bin:"*)
+        ;;
     *)
         printf "${YELLOW}!${RESET} ${BOLD}PATH:${RESET} ~/.local/bin is not in your PATH. Add it:\n"
         case "$SHELL" in
@@ -136,5 +135,5 @@ case ":$PATH:" in
         ;;
 esac
 
-echo "${GREEN}Setup complete.${RESET}"
+echo "${GREEN}Setup complete. No sudo required.${RESET}"
 echo ""
