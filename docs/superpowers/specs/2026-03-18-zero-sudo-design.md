@@ -196,34 +196,18 @@ The setup script runs at install time (Homebrew `post_install`). All sudo steps 
 
 **`~/.ssh/rc` configuration (step 5):**
 
-The installer appends the keepalive invocation to `~/.ssh/rc`, guarded by an idempotency check.
-
-**X11 forwarding caveat:** When `~/.ssh/rc` exists, sshd expects it to handle the X11 `xauth` protocol cookie from stdin (sshd no longer runs `xauth` automatically). If the installer *creates* a new `~/.ssh/rc` (file didn't exist before), it must include the standard xauth handling. If appending to an existing file, the user has presumably already handled this.
+The installer appends the keepalive invocation to `~/.ssh/rc`, guarded by an idempotency check:
 
 ```bash
-mkdir -p "$HOME/.ssh"
-if [ ! -f "$HOME/.ssh/rc" ]; then
-    # New file: include standard xauth handling (sshd won't do it automatically)
-    cat > "$HOME/.ssh/rc" <<'SSHRC'
-#!/bin/sh
-# Handle X11 forwarding auth (required when ~/.ssh/rc exists)
-if read proto cookie && [ -n "$DISPLAY" ]; then
-    if [ "$(echo "$DISPLAY" | cut -c1-10)" = "localhost:" ]; then
-        echo "add unix:$(echo "$DISPLAY" | cut -c11-) $proto $cookie"
-    else
-        echo "add $DISPLAY $proto $cookie"
-    fi | xauth -q -
-fi
-# op-tunnel keepalive
-[ -n "$LC_OP_TUNNEL_ID" ] && op-tunnel-keepalive --session-pid "$PPID" --tunnel-id "$LC_OP_TUNNEL_ID"
-SSHRC
-elif ! grep -q 'op-tunnel-keepalive' "$HOME/.ssh/rc"; then
-    # Existing file: append keepalive line only
+if ! grep -q 'op-tunnel-keepalive' "$HOME/.ssh/rc" 2>/dev/null; then
+    mkdir -p "$HOME/.ssh"
     printf '\n# op-tunnel keepalive\n[ -n "$LC_OP_TUNNEL_ID" ] && op-tunnel-keepalive --session-pid "$PPID" --tunnel-id "$LC_OP_TUNNEL_ID"\n' >> "$HOME/.ssh/rc"
 fi
 ```
 
-The keepalive invocation is self-contained — no external script to source, no `$PPID` indirection through subshells.
+The line is self-contained — no external script to source, no `$PPID` indirection through subshells.
+
+**X11 forwarding caveat:** When `~/.ssh/rc` exists, sshd no longer runs `xauth` automatically for X11 forwarding. Op-tunnel targets terminal sessions; users needing X11 forwarding should add xauth handling to their `~/.ssh/rc` manually (see `sshd(8)` man page). This should be documented as a caveat in the README.
 
 **Caveats printed after install:**
 - SSH config Include instructions (unchanged).
@@ -360,3 +344,4 @@ Additionally, directory creation should minimize the window where permissions ar
 - On non-Ubuntu/Debian systems, `AcceptEnv LC_*` may not be in the default sshd_config. Users need to add it manually (or op-tunnel falls back to passthrough mode silently).
 - Same-machine multi-session is "first wins" — second session uses the first session's tunnel. When the first disconnects, the second session's tunnel stops working.
 - PID reuse (theoretical, see Security Model) could delay stale socket cleanup.
+- X11 forwarding (`ssh -X`) breaks if `~/.ssh/rc` doesn't include xauth handling. Op-tunnel targets terminal sessions; users needing X11 should add the standard xauth block to their `~/.ssh/rc` (see `sshd(8)`). README should document this caveat.
