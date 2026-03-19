@@ -30,8 +30,17 @@ func main() {
 
 	// Create socket directory with restrictive permissions
 	socketDir := filepath.Dir(socketPath)
-	if err := os.MkdirAll(socketDir, 0700); err != nil {
+	oldUmask := syscall.Umask(0077)
+	err := os.MkdirAll(socketDir, 0700)
+	syscall.Umask(oldUmask)
+	if err != nil {
 		log.Fatalf("creating socket directory: %v", err)
+	}
+
+	// Verify ownership of the user-specific socket directory
+	userDir := oppath.UserDir(user)
+	if err := oppath.VerifyDirOwnership(userDir); err != nil {
+		log.Fatalf("socket directory security check failed: %v", err)
 	}
 
 	// Remove stale socket
