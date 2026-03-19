@@ -50,20 +50,32 @@ builds:
       - amd64
       - arm64
 
+  - id: op-tunnel-keepalive
+    main: ./cmd/op-tunnel-keepalive
+    binary: op-tunnel-keepalive
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
 archives:
   - id: op-tunnel
     ids:
       - op-tunnel-server
       - op-tunnel-client
       - op-tunnel-doctor
+      - op-tunnel-keepalive
     name_template: "op-tunnel-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     files:
       - src: LICENSE
       - src: packaging/ssh.config.tmpl
-        dst: dist
-        strip_parent: true
-      - src: packaging/op-tunnel-sshd.conf
         dst: dist
         strip_parent: true
       - src: packaging/op-tunnel-setup
@@ -97,7 +109,8 @@ brews:
       bin.install "op-tunnel-server"
       bin.install "op-tunnel-client"
       bin.install "op-tunnel-doctor"
-      (share/"op-tunnel").install "dist/op-tunnel-sshd.conf", "dist/ssh.config.tmpl"
+      bin.install "op-tunnel-keepalive"
+      (share/"op-tunnel").install "dist/ssh.config.tmpl"
       bin.install "dist/op-tunnel-setup"
     post_install: |
       system bin/"op-tunnel-setup"
@@ -112,3 +125,4 @@ brews:
       assert_predicate bin/"op-tunnel-server", :executable?
       assert_predicate bin/"op-tunnel-client", :executable?
       assert_predicate bin/"op-tunnel-doctor", :executable?
+      assert_predicate bin/"op-tunnel-keepalive", :executable?
