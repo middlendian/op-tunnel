@@ -167,19 +167,27 @@ func main() {
 		failures++
 	}
 
-	// 9. Config directory
+	// 9. Config directory and tunnel ID consistency
 	configDir := oppath.ConfigDir()
-	tunnelIDFile := filepath.Join(configDir, "tunnel-id")
+	tunnelIDFile := filepath.Join(configDir, "server-tunnel-id")
 	sshConfigFile := filepath.Join(configDir, "ssh.config")
-	if _, err := os.Stat(tunnelIDFile); err == nil {
-		if _, err := os.Stat(sshConfigFile); err == nil {
+	if idData, err := os.ReadFile(tunnelIDFile); err == nil {
+		serverTunnelID := strings.TrimSpace(string(idData))
+		if sshData, err := os.ReadFile(sshConfigFile); err == nil {
 			pass(fmt.Sprintf("Config: %s", configDir))
+			// Verify server-tunnel-id matches what's baked into ssh.config
+			if strings.Contains(string(sshData), serverTunnelID) {
+				pass("server-tunnel-id matches ssh.config")
+			} else {
+				fail("server-tunnel-id does not match ssh.config (drift detected)", "Run: op-tunnel-setup")
+				failures++
+			}
 		} else {
 			fail("ssh.config missing from config dir", "brew reinstall op-tunnel")
 			failures++
 		}
 	} else {
-		fail("tunnel-id missing from config dir", "brew reinstall op-tunnel")
+		fail("server-tunnel-id missing from config dir", "brew reinstall op-tunnel")
 		failures++
 	}
 

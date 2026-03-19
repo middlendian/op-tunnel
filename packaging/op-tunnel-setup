@@ -48,7 +48,7 @@ verify_ownership() {
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/op-tunnel"
-TUNNEL_ID_FILE="$CONFIG_DIR/tunnel-id"
+TUNNEL_ID_FILE="$CONFIG_DIR/server-tunnel-id"
 SSH_CONFIG_FILE="$CONFIG_DIR/ssh.config"
 
 echo ""
