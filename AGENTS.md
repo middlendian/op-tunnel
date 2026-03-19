@@ -28,10 +28,10 @@ Remote Host                                 Local Host
 | `cmd/op-tunnel-client/main.go` | Remote stub: tunnel mode if `LC_OP_TUNNEL_ID` set, else passthrough |
 | `protocol/protocol.go` | Wire protocol: JSON over Unix socket, 4-byte big-endian length prefix |
 | `packaging/ssh.config.tmpl` | SSH config template with @@TUNNEL_ID@@ and @@LOCAL_USER@@ placeholders |
-| `packaging/op-tunnel-sshd.conf` | sshd drop-in: `AcceptEnv LC_OP_TUNNEL_ID`, `StreamLocalBindUnlink yes` |
 | `packaging/op-tunnel-setup` | Post-install script: generates tunnel ID, ssh.config, symlink, socket dirs |
 | `oppath/oppath.go` | Shared socket path construction, config dir, binary lookup |
 | `cmd/op-tunnel-doctor/main.go` | Diagnostic tool: checks server, tunnel, symlink, config |
+| `cmd/op-tunnel-keepalive/main.go` | Session monitor: cleans up stale sockets on disconnect |
 | `test/e2e.sh` | End-to-end test via Docker + SSH |
 
 ## Wire protocol
@@ -53,7 +53,7 @@ Stdout and stderr are base64-encoded. Exit code `-1` indicates a tunnel-level er
 - **No commits on main branch**: all work should be committed to a feature branch, merges to main happen via pull requests.
 - **No shell injection**: args are passed as an array to `exec`, never through a shell.
 - **Allowlisted env vars**: only specific `OP_*` vars are forwarded (see `protocol.AllowedEnvVars`).
-- **Socket paths**: `/opt/op-tunnel/<user>/` directories with `0700` permissions. Sockets are `0600`.
+- **Socket paths**: `/tmp/op-tunnel-<user>/` directories with `0700` permissions. Sockets are `0600`.
 - **Trust model**: equivalent to SSH agent forwarding — whoever can write to the socket can execute `op` as you.
 
 ## Build and test
