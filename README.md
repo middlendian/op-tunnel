@@ -56,10 +56,12 @@ Remote Host                                 Local Host
 the remote machine, where `op-tunnel-client` is symlinked as `~/.local/bin/op` to serve as a wrapper. When `LC_OP_TUNNEL_ID` is set (inside an SSH session), it sends the command over the socket; the server executes `op` locally and returns stdout, stderr, and
 exit code. When `LC_OP_TUNNEL_ID` is not set, `op-tunnel-client` is a passthrough for the local `op` binary.
 
+An `op-tunnel-keepalive` process runs alongside each SSH session to monitor the connection and clean up stale sockets when the session disconnects.
+
 ### Security model
 
 The trust model is equivalent to SSH agent forwarding between two trusted hosts. Only allowlisted `OP_*` environment
-variables are forwarded. The socket is owner-only (`0600`) and lives in a per-user directory under `/opt/op-tunnel/<user>/`. Access to 1Password items is
+variables are forwarded. The socket is owner-only (`0600`) and lives in a per-user directory under `/tmp/op-tunnel-$USER/`. Access to 1Password items is
 governed by the same local security settings as the `op` CLI itself.
 
 ### Supported `op` CLI features
@@ -101,7 +103,11 @@ If something isn't working, run:
 op-tunnel-doctor
 ```
 
-It checks the server, tunnel connection, symlink, PATH, SSH config, sshd config, directory permissions, and config files. Each failing check shows a recommended fix.
+It checks the server, tunnel connection, symlink, PATH, SSH config, directory permissions, and config files. Each failing check shows a recommended fix.
+
+## Known limitations
+
+- op-tunnel configures `~/.ssh/rc` on each machine. If you use X11 forwarding (`ssh -X`), you may need to add xauth handling to `~/.ssh/rc` — see `sshd(8)`. Op-tunnel targets terminal sessions; for GUI access, use the 1Password desktop app directly.
 
 ## License
 
