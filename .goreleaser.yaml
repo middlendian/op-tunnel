@@ -112,15 +112,8 @@ brews:
       bin.install "op-tunnel-keepalive"
       (share/"op-tunnel").install "dist/ssh.config.tmpl"
       bin.install "dist/op-tunnel-setup"
-    post_install: |
-      pw = Etc.getpwuid(Process.uid)
-      ENV["HOME"] = pw.dir
-      ENV["USER"] = pw.name
-      system bin/"op-tunnel-setup"
     caveats: |
-      op-tunnel-setup has been run automatically.
-
-      If you need to reconfigure, run:
+      To complete setup, run:
         op-tunnel-setup
 
       See https://github.com/middlendian/op-tunnel for full instructions.
