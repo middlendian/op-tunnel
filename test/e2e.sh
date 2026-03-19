@@ -98,7 +98,7 @@ PREFLIGHT=$(ssh -F "$SSH_CONFIG" -o BatchMode=yes op-tunnel-test \
     'echo "DEBUG: HOME=$HOME"
     echo "DEBUG: LC_OP_TUNNEL_ID=${LC_OP_TUNNEL_ID:-<unset>}"
     if [ -z "${LC_OP_TUNNEL_ID:-}" ]; then
-        echo "FAIL: LC_OP_TUNNEL_ID is not set (check AcceptEnv in sshd_config)"
+        echo "FAIL: LC_OP_TUNNEL_ID is not set (check that sshd AcceptEnv includes LC_* variables)"
     else
         SOCK="/tmp/op-tunnel-$USER/client/${LC_OP_TUNNEL_ID}.sock"
         echo "DEBUG: expected socket: $SOCK"

@@ -92,8 +92,11 @@ func main() {
 		die(fmt.Sprintf("op-tunnel: %v", err))
 	}
 
-	// Ensure client subdirectory exists
-	if err := os.MkdirAll(clientDir, 0700); err != nil {
+	// Ensure client subdirectory exists (with restrictive umask)
+	oldUmask2 := syscall.Umask(0077)
+	err := os.MkdirAll(clientDir, 0700)
+	syscall.Umask(oldUmask2)
+	if err != nil {
 		die(fmt.Sprintf("creating client directory: %v", err))
 	}
 
@@ -114,8 +117,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Socket file doesn't exist yet — directory was just created
-	// RemoteForward hasn't bound yet or failed; nothing to monitor
+	// Socket file doesn't exist — RemoteForward hasn't bound yet or failed
 	warn("op-tunnel: ready — reconnect to activate")
 	os.Exit(0)
 }
