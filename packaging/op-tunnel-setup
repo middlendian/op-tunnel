@@ -100,12 +100,43 @@ info "Socket directory: $SOCKET_DIR/ (owner-only)"
 
 # ─── Step 5: Configure ~/.ssh/rc ─────────────────────────────────────────────
 
-if ! grep -q 'op-tunnel-keepalive' "$HOME/.ssh/rc" 2>/dev/null; then
-    mkdir -p "$HOME/.ssh"
-    printf '\n# op-tunnel keepalive\n[ -n "$LC_OP_TUNNEL_ID" ] && op-tunnel-keepalive --session-pid "$PPID" --tunnel-id "$LC_OP_TUNNEL_ID"\n' >> "$HOME/.ssh/rc"
-    info "Configured: ~/.ssh/rc"
+mkdir -p "$HOME/.ssh"
+
+# Ensure X11 forwarding works when ~/.ssh/rc exists.
+# sshd skips its built-in xauth handling whenever ~/.ssh/rc is present,
+# so the rc file must run xauth itself.
+if ! grep -q 'xauth' "$HOME/.ssh/rc" 2>/dev/null; then
+    cat >> "$HOME/.ssh/rc" << 'SSHRC'
+
+# X11 forwarding (required when ~/.ssh/rc exists)
+if read proto cookie && [ -n "$DISPLAY" ]; then
+    if [ "$(echo "$DISPLAY" | cut -c1-10)" = "localhost:" ]; then
+        xauth -q add "unix:$(echo "$DISPLAY" | cut -c11-)" "$proto" "$cookie"
+    else
+        xauth -q add "$DISPLAY" "$proto" "$cookie"
+    fi
+fi
+SSHRC
+    info "Configured: ~/.ssh/rc (X11 forwarding)"
 else
-    info "~/.ssh/rc already configured"
+    info "~/.ssh/rc X11 forwarding already configured"
+fi
+
+if ! grep -q 'op-tunnel-keepalive' "$HOME/.ssh/rc" 2>/dev/null; then
+    printf '\n# op-tunnel keepalive\n[ -n "$LC_OP_TUNNEL_ID" ] && op-tunnel-keepalive --session-pid "$PPID" --tunnel-id "$LC_OP_TUNNEL_ID"\n' >> "$HOME/.ssh/rc"
+    info "Configured: ~/.ssh/rc (keepalive)"
+else
+    info "~/.ssh/rc keepalive already configured"
+fi
+
+# ─── Step 6: Configure tmux to pass LC_OP_TUNNEL_ID on attach ────────────────
+
+TMUX_CONF="$HOME/.tmux.conf"
+if ! grep -q 'LC_OP_TUNNEL_ID' "$TMUX_CONF" 2>/dev/null; then
+    printf '\n# op-tunnel: refresh tunnel ID on attach\nset-option -g update-environment "LC_OP_TUNNEL_ID"\n' >> "$TMUX_CONF"
+    info "Configured: ~/.tmux.conf (update-environment)"
+else
+    info "~/.tmux.conf already configured"
 fi
 
 # ─── Caveats ──────────────────────────────────────────────────────────────────

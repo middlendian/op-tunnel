@@ -100,30 +100,40 @@ func main() {
 		die(fmt.Sprintf("creating client directory: %v", err))
 	}
 
-	// Check socket state
-	if _, err := os.Stat(socketPath); err == nil {
-		// Socket file exists — check liveness
-		conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
-		if err == nil {
-			// Socket is alive — RemoteForward succeeded (or another session owns it)
-			_ = conn.Close()
-			info("op-tunnel: active")
-			daemonize()
-			return
+	// Wait briefly for RemoteForward to bind the socket.
+	// There is a race between sshd running ~/.ssh/rc and the SSH client
+	// establishing the forwarded socket — give it a moment.
+	var socketLive bool
+	for attempts := 0; attempts < 10; attempts++ {
+		if _, err := os.Stat(socketPath); err == nil {
+			conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
+			if err == nil {
+				_ = conn.Close()
+				socketLive = true
+				break
+			}
+			// Socket file exists but is stale — remove and keep waiting
+			_ = os.Remove(socketPath)
 		}
-		// Stale socket — clean it up, ask user to reconnect
-		_ = os.Remove(socketPath)
-		warn("op-tunnel: stale socket removed — reconnect to activate")
-		os.Exit(0)
+		time.Sleep(200 * time.Millisecond)
 	}
 
-	// Socket file doesn't exist — RemoteForward hasn't bound yet or failed
-	warn("op-tunnel: ready — reconnect to activate")
+	if socketLive {
+		info("op-tunnel: active")
+		daemonize()
+		return
+	}
+
+	warn("op-tunnel: socket did not appear — reconnect to activate")
 	os.Exit(0)
 }
 
 func daemonize() {
-	cmd := exec.Command(os.Args[0], os.Args[1:]...)
+	selfPath, err := os.Executable()
+	if err != nil {
+		die(fmt.Sprintf("daemonize: cannot resolve executable path: %v", err))
+	}
+	cmd := exec.Command(selfPath, os.Args[1:]...)
 	cmd.Env = append(os.Environ(), "_OP_TUNNEL_KEEPALIVE_DAEMON=1")
 	cmd.Stdin = nil
 	cmd.Stdout = nil
