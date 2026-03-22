@@ -43,6 +43,10 @@ func fail(msg, fix string) {
 	fmt.Printf("%s✗%s %s\n  → %s%s%s\n", red, reset, msg, yellow, fix, reset)
 }
 
+func info(msg string) {
+	fmt.Printf("%s·%s %s\n", bold, reset, msg)
+}
+
 func warn(msg, fix string) {
 	fmt.Printf("%s!%s %s\n  → %s%s%s\n", yellow, reset, msg, yellow, fix, reset)
 }
@@ -63,9 +67,11 @@ func main() {
 		failures++
 	}
 
-	// 2. Client socket (only if tunnel ID set)
+	// 2. Tunnel ID status and client socket
 	tunnelID := os.Getenv(oppath.EnvTunnelID)
 	if tunnelID != "" {
+		info(fmt.Sprintf("Tunnel ID: %s (LC_OP_TUNNEL_ID is set)", tunnelID))
+
 		clientSock := oppath.ClientSocketPath(user, tunnelID)
 		if conn, err := net.DialTimeout("unix", clientSock, 100*time.Millisecond); err == nil {
 			_ = conn.Close()
@@ -74,8 +80,17 @@ func main() {
 			fail("Client tunnel is not connected", "Reconnect your SSH session")
 			failures++
 		}
+
+		// Check if op-tunnel-keepalive daemon is running
+		out, err := exec.Command("pgrep", "-f", "op-tunnel-keepalive.*--tunnel-id").Output()
+		if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+			pass("op-tunnel-keepalive is running")
+		} else {
+			fail("op-tunnel-keepalive is not running", "Reconnect your SSH session to restart the keepalive daemon")
+			failures++
+		}
 	} else {
-		pass("Client tunnel check skipped (not in SSH session)")
+		info("LC_OP_TUNNEL_ID is not set (not in an SSH tunnel session)")
 	}
 
 	// 3. Real op binary
